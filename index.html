@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UTUI Demo</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: black;
+    }
+
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="xcanvas"></canvas>
+  <script src="/demo.js"></script>
+  <script>
+    // Dev reload websocket
+    (function() {
+      const ws = new WebSocket("ws://" + location.host + "/__dev");
+      ws.onmessage = (e) => {
+        if (e.data === "reload") {
+          location.reload();
+        }
+      };
+      ws.onclose = () => setTimeout(() => location.reload(), 1000);
+    })();
+  </script>
+</body>
+</html>

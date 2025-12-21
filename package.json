@@ -1,0 +1,37 @@
+{
+  "name": "utui",
+  "version": "0.1.0",
+  "description": "Text UI framework rendering on HTML canvas",
+  "module": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "styles": "bun run src/tools/build-styles.ts",
+    "watch:styles": "bun run --watch src/tools/build-styles.ts",
+    "build": "bun build src/index.ts --outdir dist --target browser && tsc --emitDeclarationOnly",
+    "build:demo": "bun build demo.ts --outfile demo.js --target browser",
+    "watch:demo": "bun build demo.ts --outfile demo.js --target browser --watch",
+    "dev": "bun run watch:demo & bun server.ts",
+    "start": "bun run build:demo && bun server.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
