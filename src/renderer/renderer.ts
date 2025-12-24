@@ -1,6 +1,7 @@
-import { Atlas } from "../atlas/atlas.ts";
-import type {RendererBuffer} from "./renderer-buffer.ts";
-import type {AtlasSheet} from "../atlas/atlas-sheet.ts";
+import { Atlas } from "./../atlas/atlas.ts";
+import { AtlasSheet } from "./../atlas/atlas-sheet.ts";
+import { PlainBuffer } from "../buffer/plain-buffer.ts";
+import {RendererUtils} from "./renderer-utils.ts";
 
 const CHAR_ASPECT = 0.6;
 
@@ -18,7 +19,8 @@ export class Renderer {
     private _fontSize:number = 0;
     private _atlasDirty:boolean = false;
     private _forceRender:boolean = false;
-    private _rendererBuffer:RendererBuffer|null = null;
+    private _rendererBuffer:PlainBuffer|null = null;
+    private _clearColour:string = '#000000'
 
     constructor(canvas:HTMLCanvasElement, atlas:Atlas,cols:number, rows:number) {
         this._canvas = canvas;
@@ -41,8 +43,6 @@ export class Renderer {
         this._viewW = this._cellW * this._cols;
         this._viewH = this._cellH * this._rows;
         this._fontSize = this._cellH;
-
-        console.log(this._dpr, this._cellW, this._cellH, this._viewW, this._viewH);
 
         this._canvas.width = this._viewW * this._dpr;
         this._canvas.height = this._viewH * this._dpr;
@@ -69,6 +69,14 @@ export class Renderer {
         );
     }
 
+    get width():number {
+        return this._canvas.width;
+    }
+
+    get height():number {
+        return this._canvas.height;
+    }
+
     get cols() {
         return this._cols;
     }
@@ -77,96 +85,47 @@ export class Renderer {
         return this._rows;
     }
 
+    get cellW():number {
+        return this._cellW;
+    }
+
+    get cellH():number {
+        return this._cellH;
+    }
+
+    get dpr():number {
+        return this._dpr;
+    }
+
     get buffer() {
         return this._rendererBuffer;
     }
 
-    set buffer(buffer:RendererBuffer|null) {
+    set clearColour(clearColour:string) {
+        this._clearColour = clearColour;
+        document.body.style.backgroundColor = clearColour;
+    }
+
+    set buffer(buffer:PlainBuffer|null) {
         this._rendererBuffer = buffer;
         this._forceRender = true;
     }
 
-    renderFromBuffer(buffer:RendererBuffer, force:boolean = false) {
-
-        if (this._cols != buffer.cols || this._rows != buffer.rows) {
-            this._ctx.fillStyle = 'red';
-            this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
-            return;
-        }
-
-        if (this._cols * this._rows != buffer.buffer.length) {
-            return;
-        }
+    renderFromBuffer(buffer:PlainBuffer, force:boolean = false) {
 
         if (force == false && buffer.dirty == false) {
             return;
         }
 
-        let x = 0, y = 0, idx = 0, stride = this._cols, rows = this._rows;
-        let sheetNum = -1;
-        let sheet:HTMLCanvasElement;
-        const buf = buffer.buffer;
-        const dirty = buffer.dirtyBuffer;
-        const ctx = this._ctx;
-
-        const cellW = this._cellW;
-        const cellH = this._cellH;
-        const scaledW = cellW * this._dpr;
-        const scaledH = cellH * this._dpr;
-
-        console.log('* RENDER BUFFER - BEGIN');
-
         if (force) {
-            while (rows--) {
-                stride = this._cols;
-                while (stride--) {
-                    const char_attr: number = buf[idx++]!;
-                    if (char_attr != 0) {
-                        const entry = this._atlas.get(char_attr);
-                        if (entry.sheet != sheetNum) {
-                            sheet = this._atlas.getSheet(entry.sheet)!.canvas;
-                            sheetNum = entry.sheet;
-                        }
-                        ctx.drawImage(sheet,
-                            entry.x, entry.y, scaledW, scaledH,
-                            x, y, cellW, cellH);
-                    }
-                    x += cellW;
-                }
-                x = 0;
-                y += cellH
-            }
+            RendererUtils.RenderCopy(this._ctx, this, buffer, this._atlas);
         }
         else {
-            while(rows--) {
-                stride = this._cols;
-                while(stride--) {
-                    if (dirty[idx] == 0) {
-                        idx++;
-                        x += cellW;
-                        continue;
-                    }
-
-                    const char_attr:number = buf[idx++]!;
-                    if (char_attr != 0) {
-                        const entry = this._atlas.get(char_attr);
-                        if (entry.sheet != sheetNum) {
-                            sheet = this._atlas.getSheet(entry.sheet)!.canvas;
-                            sheetNum = entry.sheet;
-                        }
-                        ctx.drawImage(sheet,
-                            entry.x, entry.y, scaledW, scaledH,
-                            x, y, cellW, cellH);
-                    }
-                    x += cellW;
-                }
-                x = 0;
-                y += cellH
+            if (buffer.dirty) {
+                RendererUtils.RenderCopyTested(this._ctx, this, buffer, this._atlas);
             }
         }
 
-        buffer.clearDirty();
-        console.log('* RENDER BUFFER - END');
     }
 
 
@@ -185,13 +144,15 @@ export class Renderer {
 
         if (this._forceRender || (this._rendererBuffer != null && this._rendererBuffer.dirty)) {
 
+            this._ctx.fillStyle = this._clearColour;
+
+            this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
+
+
             if (this._rendererBuffer != null) {
                 this.renderFromBuffer(this._rendererBuffer, this._forceRender);
             }
             else {
-                this._ctx.fillStyle = 'blue';
-                this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
-
                 const str = '<Empty Buffer>';
                 let x = 0, y = 0;
 

@@ -16,8 +16,6 @@ export class AtlasSheet {
         this._canvas.height = SHEET_SIZE;
         this._ctx = this._canvas.getContext('2d', { alpha: false });
         this._id = id;
-
-        console.log('** New Atlas Sheet');
     }
 
     get canvas():HTMLCanvasElement {

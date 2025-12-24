@@ -36,6 +36,82 @@ class Palette {
   }
 }
 
+// src/renderer/renderer-utils.ts
+class RendererUtils {
+  static RenderCopy(dst, renderer, buffer, atlas) {
+    if (renderer === undefined || buffer === undefined || dst === undefined || atlas === undefined) {
+      return;
+    }
+    if (renderer.cols * renderer.rows != buffer.glyphs.length) {
+      return;
+    }
+    let x = 0, y = 0, idx = 0, stride = buffer.cols, rows = buffer.rows;
+    let srcSheetNum = -1;
+    let srcSheet;
+    const buf = buffer.glyphs.buffer;
+    const cellW = renderer.cellW;
+    const cellH = renderer.cellH;
+    const scaledW = cellW * renderer.dpr;
+    const scaledH = cellH * renderer.dpr;
+    while (rows--) {
+      stride = buffer.cols;
+      while (stride--) {
+        const char_attr = buf[idx++];
+        if (char_attr !== 0) {
+          const entry = atlas.get(char_attr);
+          if (entry.sheet != srcSheetNum) {
+            srcSheet = atlas.getSheet(entry.sheet).canvas;
+            srcSheetNum = entry.sheet;
+          }
+          dst.drawImage(srcSheet, entry.x, entry.y, scaledW, scaledH, x, y, cellW, cellH);
+        }
+        x += cellW;
+      }
+      x = 0;
+      y += cellH;
+    }
+  }
+  static RenderCopyTested(dst, renderer, buffer, atlas) {
+    if (renderer === undefined || buffer === undefined || dst === undefined || atlas === undefined) {
+      return;
+    }
+    if (renderer.cols * renderer.rows != buffer.glyphs.length) {
+      return;
+    }
+    let x = 0, y = 0, idx = 0, stride = buffer.cols, rows = buffer.rows;
+    let srcSheetNum = -1;
+    let srcSheet;
+    const buf = buffer.glyphs.buffer;
+    const genBits = buffer.generationBits;
+    const cellW = renderer.cellW;
+    const cellH = renderer.cellH;
+    const scaledW = cellW * renderer.dpr;
+    const scaledH = cellH * renderer.dpr;
+    while (rows--) {
+      stride = buffer.cols;
+      while (stride--) {
+        const char_attr = buf[idx++];
+        if ((char_attr & 4278190080) !== genBits) {
+          idx++;
+          x += cellW;
+          continue;
+        }
+        if (char_attr != 0) {
+          const entry = atlas.get(char_attr);
+          if (entry.sheet != srcSheetNum) {
+            srcSheet = atlas.getSheet(entry.sheet).canvas;
+            srcSheetNum = entry.sheet;
+          }
+          dst.drawImage(srcSheet, entry.x, entry.y, scaledW, scaledH, x, y, cellW, cellH);
+        }
+        x += cellW;
+      }
+      x = 0;
+      y += cellH;
+    }
+  }
+}
+
 // src/renderer/renderer.ts
 var CHAR_ASPECT = 0.6;
 
@@ -54,6 +130,7 @@ class Renderer {
   _atlasDirty = false;
   _forceRender = false;
   _rendererBuffer = null;
+  _clearColour = "#000000";
   constructor(canvas, atlas, cols, rows) {
     this._canvas = canvas;
     this._ctx = canvas.getContext("2d");
@@ -70,7 +147,6 @@ class Renderer {
     this._viewW = this._cellW * this._cols;
     this._viewH = this._cellH * this._rows;
     this._fontSize = this._cellH;
-    console.log(this._dpr, this._cellW, this._cellH, this._viewW, this._viewH);
     this._canvas.width = this._viewW * this._dpr;
     this._canvas.height = this._viewH * this._dpr;
     this._canvas.style.width = this._viewW + "px";
@@ -86,86 +162,49 @@ class Renderer {
     const scaledH = this._cellH * this._dpr;
     this._ctx.drawImage(sheet.canvas, entry.x, entry.y, scaledW, scaledH, x, y, this._cellW, this._cellH);
   }
+  get width() {
+    return this._canvas.width;
+  }
+  get height() {
+    return this._canvas.height;
+  }
   get cols() {
     return this._cols;
   }
   get rows() {
     return this._rows;
   }
+  get cellW() {
+    return this._cellW;
+  }
+  get cellH() {
+    return this._cellH;
+  }
+  get dpr() {
+    return this._dpr;
+  }
   get buffer() {
     return this._rendererBuffer;
+  }
+  set clearColour(clearColour) {
+    this._clearColour = clearColour;
+    document.body.style.backgroundColor = clearColour;
   }
   set buffer(buffer) {
     this._rendererBuffer = buffer;
     this._forceRender = true;
   }
   renderFromBuffer(buffer, force = false) {
-    if (this._cols != buffer.cols || this._rows != buffer.rows) {
-      this._ctx.fillStyle = "red";
-      this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
-      return;
-    }
-    if (this._cols * this._rows != buffer.buffer.length) {
-      return;
-    }
     if (force == false && buffer.dirty == false) {
       return;
     }
-    let x = 0, y = 0, idx = 0, stride = this._cols, rows = this._rows;
-    let sheetNum = -1;
-    let sheet;
-    const buf = buffer.buffer;
-    const dirty = buffer.dirtyBuffer;
-    const ctx = this._ctx;
-    const cellW = this._cellW;
-    const cellH = this._cellH;
-    const scaledW = cellW * this._dpr;
-    const scaledH = cellH * this._dpr;
-    console.log("* RENDER BUFFER - BEGIN");
     if (force) {
-      while (rows--) {
-        stride = this._cols;
-        while (stride--) {
-          const char_attr = buf[idx++];
-          if (char_attr != 0) {
-            const entry = this._atlas.get(char_attr);
-            if (entry.sheet != sheetNum) {
-              sheet = this._atlas.getSheet(entry.sheet).canvas;
-              sheetNum = entry.sheet;
-            }
-            ctx.drawImage(sheet, entry.x, entry.y, scaledW, scaledH, x, y, cellW, cellH);
-          }
-          x += cellW;
-        }
-        x = 0;
-        y += cellH;
-      }
+      RendererUtils.RenderCopy(this._ctx, this, buffer, this._atlas);
     } else {
-      while (rows--) {
-        stride = this._cols;
-        while (stride--) {
-          if (dirty[idx] == 0) {
-            idx++;
-            x += cellW;
-            continue;
-          }
-          const char_attr = buf[idx++];
-          if (char_attr != 0) {
-            const entry = this._atlas.get(char_attr);
-            if (entry.sheet != sheetNum) {
-              sheet = this._atlas.getSheet(entry.sheet).canvas;
-              sheetNum = entry.sheet;
-            }
-            ctx.drawImage(sheet, entry.x, entry.y, scaledW, scaledH, x, y, cellW, cellH);
-          }
-          x += cellW;
-        }
-        x = 0;
-        y += cellH;
+      if (buffer.dirty) {
+        RendererUtils.RenderCopyTested(this._ctx, this, buffer, this._atlas);
       }
     }
-    buffer.clearDirty();
-    console.log("* RENDER BUFFER - END");
   }
   render() {
     if (this._cellW === 0 || this._cellH === 0) {
@@ -178,11 +217,11 @@ class Renderer {
       this._forceRender = true;
     }
     if (this._forceRender || this._rendererBuffer != null && this._rendererBuffer.dirty) {
+      this._ctx.fillStyle = this._clearColour;
+      this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
       if (this._rendererBuffer != null) {
         this.renderFromBuffer(this._rendererBuffer, this._forceRender);
       } else {
-        this._ctx.fillStyle = "blue";
-        this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
         const str = "<Empty Buffer>";
         let x = 0, y = 0;
         for (let i = 0;i < str.length; i++) {
@@ -213,7 +252,6 @@ class AtlasSheet {
     this._canvas.height = SHEET_SIZE;
     this._ctx = this._canvas.getContext("2d", { alpha: false });
     this._id = id;
-    console.log("** New Atlas Sheet");
   }
   get canvas() {
     return this._canvas;
@@ -247,8 +285,8 @@ class AtlasSheet {
 
 // src/atlas/atlas.ts
 var FONT_FAMILY = '"Cascadia Code", Menlo, monospace';
-var ASCENT_GLYPHS = ["M", "["];
-var DESCENT_GLYPHS = ["g", "M"];
+var ASCENT_GLYPHS = ["M", "[", "|"];
+var DESCENT_GLYPHS = ["g", "M", "|"];
 class Atlas {
   _palette;
   _sheets = new Array;
@@ -265,6 +303,11 @@ class Atlas {
   _realCellW = 0;
   _realCellH = 0;
   _fontHeight = 0;
+  _aspect_ratio = 0;
+  _glyph_grid = 0;
+  _glyph_middle_x = 0;
+  _glyph_middle_y = 0;
+  _glyph_top = 0;
   constructor(palette) {
     this._palette = palette;
     this._tempCanvas = document.createElement("canvas");
@@ -282,38 +325,46 @@ class Atlas {
     if (this._cellW === cellW && this._cellH === cellH && this._fontSize === fontSize && this._dpr === dpr) {
       return;
     }
-    console.log("Updating Atlas");
     this.clear();
     this._cellW = cellW;
     this._cellH = cellH;
     this._fontSize = fontSize;
     this._dpr = dpr;
-    console.log("ATLAS.1", this._cellW, this._cellH, this._fontSize, this._dpr);
     const scaledFontSize = fontSize * dpr;
     const scaledCellH = cellH * dpr;
     const scaledCellW = cellW * dpr;
-    this._tempContext.font = `${scaledFontSize}px ${FONT_FAMILY}`;
     this._tempContext.textbaseLine = "alphabetic";
+    let adjustedFontSize = scaledFontSize;
     let maxAscent = 0, maxDescent = 0;
-    for (const glyph of ASCENT_GLYPHS) {
-      const metric = this._tempContext.measureText(glyph);
-      if (metric.actualBoundingBoxAscent > maxAscent) {
-        maxAscent = metric.actualBoundingBoxAscent;
+    for (let i = 0;i < 5; i++) {
+      this._tempContext.font = `${adjustedFontSize}px ${FONT_FAMILY}`;
+      maxAscent = 0, maxDescent = 0;
+      for (const glyph of ASCENT_GLYPHS) {
+        const metric = this._tempContext.measureText(glyph);
+        maxAscent = Math.max(maxAscent, metric.actualBoundingBoxAscent);
       }
-    }
-    for (const glyph of DESCENT_GLYPHS) {
-      const metric = this._tempContext.measureText(glyph);
-      if (metric.actualBoundingBoxDescent > maxDescent) {
-        maxDescent = metric.actualBoundingBoxDescent;
+      for (const glyph of DESCENT_GLYPHS) {
+        const metric = this._tempContext.measureText(glyph);
+        maxDescent = Math.max(maxDescent, metric.actualBoundingBoxDescent);
       }
+      const fontHeight = maxAscent + maxDescent;
+      if (fontHeight <= scaledCellH) {
+        break;
+      }
+      adjustedFontSize *= scaledCellH / fontHeight;
     }
-    this._scaledFontSize = scaledFontSize;
+    this._scaledFontSize = adjustedFontSize;
     this._fontAscent = maxAscent;
     this._fontDescent = maxDescent;
     this._fontHeight = maxAscent + maxDescent;
     this._realCellW = scaledCellW;
     this._realCellH = scaledCellH;
-    this._tempContext.font = `${scaledFontSize}px ${FONT_FAMILY}`;
+    this._tempContext.font = `${this._scaledFontSize}px ${FONT_FAMILY}`;
+    this._glyph_grid = this._realCellW / 3;
+    this._glyph_top = (this._realCellH - this._glyph_grid * 3) / 2;
+    this._glyph_middle_x = this._glyph_grid * 1.5;
+    this._glyph_middle_y = this._glyph_top + this._glyph_grid * (3 / 2);
+    this._aspect_ratio = this._realCellH / this._realCellW;
   }
   get(char_attr) {
     let entry = this._entries.get(char_attr);
@@ -333,15 +384,15 @@ class Atlas {
   render(char_attr) {
     let char = char_attr & 65535;
     let attr = (char_attr & 4294901760) >> 16;
-    if (char < 32 || char === 9608) {
-      char = 32;
+    if (char === 9608) {
+      char = 1;
     }
     const fg = attr & 15;
     const bg = attr >> 4 & 15;
     const ctx = this._tempContext;
-    ctx.fillStyle = this._palette.getHexColourChecked(bg);
-    ctx.fillRect(0, 0, this._realCellW, this._realCellH);
     if (char > 32) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, this._realCellW, this._realCellH);
       ctx.fillStyle = this._palette.getHexColourChecked(fg);
       ctx.textBaseLine = "alphabetic";
       const charStr = String.fromCharCode(char);
@@ -349,6 +400,8 @@ class Atlas {
       const charX = Math.round((this._realCellW - metrics.width) / 2);
       const charY = Math.round((this._realCellH - this._fontHeight) / 2 + this._fontAscent);
       ctx.fillText(charStr, charX, charY);
+    } else {
+      this.renderSpecial(ctx, char, fg, bg);
     }
     for (const sheet2 of this._sheets) {
       const entry2 = sheet2.allocate(this._realCellW, this._realCellH);
@@ -368,45 +421,565 @@ class Atlas {
     this._entries.set(char_attr, entry);
     return entry;
   }
+  renderSpecial(ctx, char, fg, bg) {
+    const w = this._realCellW;
+    const h = this._realCellH;
+    const xm = this._glyph_middle_x;
+    const ym = this._glyph_middle_y;
+    const gs = Math.round(this._glyph_grid * 0.5);
+    const gsh = gs * 0.5;
+    const aspect = this._aspect_ratio;
+    if (char == 0) {
+      ctx.fillStyle = this._palette.getHexColourChecked(fg);
+      ctx.fillRect(0, 0, w, h);
+    } else if (char == 32) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+    } else if (char >= 1 && char <= 3) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.beginPath();
+      ctx.strokeStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = gs;
+      if (char == 1) {
+        ctx.moveTo(gsh, 0);
+        ctx.lineTo(gsh, h);
+      } else if (char == 2) {
+        ctx.moveTo(xm, 0);
+        ctx.lineTo(xm, h);
+      } else {
+        ctx.moveTo(w - gsh, 0);
+        ctx.lineTo(w - gsh, h);
+      }
+      ctx.stroke();
+    } else if (char >= 4 && char <= 6) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.beginPath();
+      ctx.strokeStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = gs;
+      if (char == 4) {
+        ctx.moveTo(0, gsh);
+        ctx.lineTo(w, gsh);
+      } else if (char == 5) {
+        ctx.moveTo(0, ym);
+        ctx.lineTo(w, ym);
+      } else {
+        ctx.moveTo(0, h - gsh);
+        ctx.lineTo(w, h - gsh);
+      }
+      ctx.stroke();
+    } else if (char >= 7 && char <= 10) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = 0;
+      const hh = h / 2;
+      const ww = w / 4;
+      let lx, ly, mx, my, rx, ry;
+      if (char == 7) {
+        lx = ww;
+        ly = hh;
+        mx = w - ww;
+        my = hh - ww;
+        rx = mx;
+        ry = hh + ww;
+      } else if (char == 8) {
+        lx = w / 2;
+        ly = hh - ww;
+        mx = w - ww;
+        my = hh + ww;
+        rx = ww;
+        ry = hh + ww;
+      } else if (char == 9) {
+        lx = ww;
+        ly = hh - ww;
+        mx = w - ww;
+        my = hh;
+        rx = ww;
+        ry = hh + ww;
+      } else if (char == 10) {
+        lx = w / 2;
+        ly = hh + ww;
+        mx = w - ww;
+        my = hh - ww;
+        rx = ww;
+        ry = hh - ww;
+      }
+      ctx.beginPath();
+      ctx.lineTo(lx, ly);
+      ctx.lineTo(mx, my);
+      ctx.lineTo(rx, ry);
+      ctx.lineTo(lx, ly);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (char == 11) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.beginPath();
+      ctx.strokeStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = gs;
+      ctx.moveTo(gsh, h);
+      ctx.lineTo(0 + gsh, 0 + gsh);
+      ctx.lineTo(w - gsh, gsh);
+      ctx.stroke();
+    } else if (char == 12) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.beginPath();
+      ctx.strokeStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = gs;
+      ctx.moveTo(gsh, gsh);
+      ctx.lineTo(w - gsh, gsh);
+      ctx.lineTo(w - gsh, h - gsh);
+      ctx.stroke();
+    } else if (char == 13) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.beginPath();
+      ctx.strokeStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = gs;
+      ctx.moveTo(w - gsh, gsh);
+      ctx.lineTo(w - gsh, h - gsh);
+      ctx.lineTo(gsh, h - gsh);
+      ctx.stroke();
+    } else if (char == 14) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.beginPath();
+      ctx.strokeStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = gs;
+      ctx.moveTo(w - gsh, h - gsh);
+      ctx.lineTo(gsh, h - gsh);
+      ctx.lineTo(gsh, gsh);
+      ctx.stroke();
+    } else if (char == 15) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.beginPath();
+      ctx.strokeStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = gs;
+      ctx.moveTo(xm, h);
+      ctx.lineTo(xm, ym);
+      ctx.lineTo(w, ym);
+      ctx.stroke();
+    } else if (char == 16) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.beginPath();
+      ctx.strokeStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = gs;
+      ctx.moveTo(0, ym);
+      ctx.lineTo(xm, ym);
+      ctx.lineTo(xm, h);
+      ctx.stroke();
+    } else if (char == 17) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.beginPath();
+      ctx.strokeStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = gs;
+      ctx.moveTo(xm, 0);
+      ctx.lineTo(xm, ym);
+      ctx.lineTo(w, ym);
+      ctx.stroke();
+    } else if (char == 18) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.beginPath();
+      ctx.strokeStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = gs;
+      ctx.moveTo(xm, 0);
+      ctx.lineTo(xm, ym);
+      ctx.lineTo(0, ym);
+      ctx.stroke();
+    } else if (char == 19) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = this._palette.getHexColourChecked(fg);
+      ctx.fillRect(w - gs, h - gs, gs, gs);
+    } else if (char == 20) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = this._palette.getHexColourChecked(fg);
+      ctx.fillRect(0, h - gs, gs, gs);
+    } else if (char == 21) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = this._palette.getHexColourChecked(fg);
+      ctx.fillRect(w - gs, 0, gs, gs);
+    } else if (char == 22) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = this._palette.getHexColourChecked(fg);
+      ctx.fillRect(0, 0, gs, gs);
+    } else if (char == 23) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.beginPath();
+      ctx.strokeStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = gs;
+      ctx.moveTo(0, gsh);
+      ctx.lineTo(w, gsh);
+      ctx.moveTo(0, gsh * 4);
+      ctx.lineTo(w, gsh * 4);
+      ctx.stroke();
+    } else if (char == 24) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = this._palette.getHexColourChecked(fg);
+      ctx.fillRect(0, 0, gs, gs);
+      ctx.fillRect(gs * 1.5, 0, gs, gs * 2.5);
+      ctx.fillRect(0, gs * 1.5, gs * 2, gs);
+    } else if (char == 25) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.beginPath();
+      ctx.strokeStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = gs;
+      ctx.moveTo(gsh, 0);
+      ctx.lineTo(gsh, h);
+      ctx.moveTo(gsh * 4, 0);
+      ctx.lineTo(gsh * 4, h);
+      ctx.stroke();
+    } else if (char == 26) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = this._palette.getHexColourChecked(fg);
+      let k = 0;
+      const s = 6;
+      let sx = 0;
+      let sy = 0;
+      const sw = w / s;
+      const sh = h / s;
+      for (let j = 0;j < s; j++) {
+        for (let i = 0;i < s; i++) {
+          k = 1 - k;
+          if (k == 1) {
+            ctx.fillRect(sx + sw / 2, sy + sh / 2, sw / 2, sh / 2);
+          }
+          sx += sw;
+        }
+        sx = 0;
+        sy += sh;
+        k = 1 - k;
+      }
+    } else if (char == 27) {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = gs * 2;
+      ctx.beginPath();
+      let ww = w;
+      let x = -ww * 0.5;
+      let y = -h * 0.5;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + ww, y + h);
+      ctx.stroke();
+      x += ww;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + ww, y + h);
+      ctx.stroke();
+      x = -ww * 0.5;
+      y += h;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + ww, y + h);
+      ctx.stroke();
+      x += ww;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + ww, y + h);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = this._palette.getHexColourChecked(bg);
+      ctx.fillRect(0, 0, w, h);
+      ctx.beginPath();
+      ctx.fillStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = gs / 4;
+      ctx.moveTo(0, 0);
+      ctx.lineTo(w, h);
+      ctx.moveTo(w, 0);
+      ctx.lineTo(0, h);
+      ctx.stroke();
+    }
+  }
 }
 
-// src/renderer/renderer-buffer.ts
-class RendererBuffer {
+// src/buffer/bitmap-utils.ts
+class Bitmap32Utils {
+  static Clear(dst, value) {
+    dst.buffer.fill(value & 4294967295);
+  }
+  static Set(dst, x, y, value) {
+    if (x >= 0 && x < dst.cols && y >= 0 && y < dst.rows) {
+      dst.buffer[x + y * dst.cols] = value;
+    }
+  }
+  static Print(dst, x, y, text, attr) {
+    if (!dst)
+      return;
+    const cols = dst.cols;
+    const rows = dst.rows;
+    const buf = dst.buffer;
+    if (y < 0 || y >= rows)
+      return;
+    const len = text.length;
+    const left = x < 0 ? 0 : x;
+    const right = x + len > cols ? cols : x + len;
+    if (left >= right)
+      return;
+    const textStart = left - x;
+    const width = right - left;
+    let offset = left + y * cols;
+    for (let i = textStart;i < textStart + width; i++) {
+      buf[offset++] = text.charCodeAt(i) & 65535 | attr;
+    }
+  }
+  static HLine(dst, x, y, w, value) {
+    if (!dst)
+      return;
+    const cols = dst.cols;
+    const rows = dst.rows;
+    const buf = dst.buffer;
+    if (y < 0 || y >= rows)
+      return;
+    const left = x < 0 ? 0 : x;
+    const right = x + w > cols ? cols : x + w;
+    if (left >= right)
+      return;
+    buf.fill(value, left + y * cols, right + y * cols);
+  }
+  static VLine(dst, x, y, h, value) {
+    if (!dst)
+      return;
+    const cols = dst.cols;
+    const rows = dst.rows;
+    const buf = dst.buffer;
+    if (x < 0 || x >= cols)
+      return;
+    const top = y < 0 ? 0 : y;
+    const bottom = y + h > rows ? rows : y + h;
+    if (top >= bottom)
+      return;
+    let offset = x + top * cols;
+    for (let row = top;row < bottom; row++) {
+      buf[offset] = value;
+      offset += cols;
+    }
+  }
+  static Fill(dst, x, y, w, h, value) {
+    if (!dst)
+      return;
+    const cols = dst.cols;
+    const rows = dst.rows;
+    const buf = dst.buffer;
+    const left = x < 0 ? 0 : x;
+    const right = x + w > cols ? cols : x + w;
+    const top = y < 0 ? 0 : y;
+    const bottom = y + h > rows ? rows : y + h;
+    if (left >= right || top >= bottom)
+      return;
+    const width = right - left;
+    let offset = left + top * cols;
+    for (let row = top;row < bottom; row++) {
+      buf.fill(value, offset, offset + width);
+      offset += cols;
+    }
+  }
+  static Border(dst, x, y, w, h, glyphs) {
+    if (!dst)
+      return;
+    if (glyphs.length != 9)
+      return;
+    if (w < 3 || h < 3)
+      return;
+    Bitmap32Utils.Set(dst, x, y, glyphs[0]);
+    Bitmap32Utils.Set(dst, x + w - 1, y, glyphs[2]);
+    Bitmap32Utils.Set(dst, x, y + h - 1, glyphs[6]);
+    Bitmap32Utils.Set(dst, x + w - 1, y + h - 1, glyphs[8]);
+    Bitmap32Utils.HLine(dst, x + 1, y, w - 2, glyphs[1]);
+    Bitmap32Utils.HLine(dst, x + 1, y + h - 1, w - 2, glyphs[7]);
+    Bitmap32Utils.VLine(dst, x, y + 1, h - 2, glyphs[3]);
+    Bitmap32Utils.VLine(dst, x + w - 1, y + 1, h - 2, glyphs[5]);
+    Bitmap32Utils.Fill(dst, x + 1, y + 1, w - 2, h - 2, glyphs[4]);
+  }
+  static Blit(dst, src, dstX, dstY, srcX, srcY, w, h) {
+    if (!dst || !src || dst == src)
+      return;
+    const srcCols = src.cols;
+    const srcRows = src.rows;
+    const srcBuf = src.buffer;
+    const dstCols = dst.cols;
+    const dstRows = dst.rows;
+    const dstBuf = dst.buffer;
+    if (dstX < 0) {
+      srcX -= dstX;
+      w += dstX;
+      dstX = 0;
+    }
+    if (srcX < 0) {
+      dstX -= srcX;
+      w += srcX;
+      srcX = 0;
+    }
+    if (dstY < 0) {
+      srcY -= dstY;
+      h += dstY;
+      dstY = 0;
+    }
+    if (srcY < 0) {
+      dstY -= srcY;
+      h += srcY;
+      srcY = 0;
+    }
+    if (dstX + w > dstCols)
+      w = dstCols - dstX;
+    if (srcX + w > srcCols)
+      w = srcCols - srcX;
+    if (dstY + h > dstRows)
+      h = dstRows - dstY;
+    if (srcY + h > srcRows)
+      h = srcRows - srcY;
+    if (w <= 0 || h <= 0)
+      return;
+    if (dstX < 0 || dstY < 0 || srcX < 0 || srcY < 0)
+      return;
+    if (dstX + w > dstCols || dstY + h > dstRows)
+      return;
+    if (srcX + w > srcCols || srcY + h > srcRows)
+      return;
+    let srcOffset = srcX + srcY * srcCols;
+    let dstOffset = dstX + dstY * dstCols;
+    for (let row = 0;row < h; row++) {
+      dstBuf.set(srcBuf.subarray(srcOffset, srcOffset + w), dstOffset);
+      srcOffset += srcCols;
+      dstOffset += dstCols;
+    }
+  }
+  static CopyAlways(dst, left) {
+    if (!dst || !left)
+      return;
+    if (dst.length != left.length)
+      return;
+    const len = dst.length;
+    const dstBuf = dst.buffer;
+    const leftBuf = left.buffer;
+    dstBuf.set(leftBuf, 0);
+  }
+  static CopyNewer(dst, left, right) {
+    if (!dst || !left || !right)
+      return;
+    if (left.length != right.length || dst.length != left.length)
+      return;
+    const len = dst.length;
+    const dstBuf = dst.buffer;
+    const leftBuf = left.buffer;
+    const rightBuf = right.buffer;
+    for (let i = 0;i < len; i++) {
+      dstBuf[i] = leftBuf[i] | rightBuf[i];
+    }
+  }
+  static CopyMask(dst, left, right, mask) {
+    if (!dst || !left || !right || !mask)
+      return;
+    if (left.length != right.length || dst.length != mask.length || left.length != mask.length)
+      return;
+    const len = dst.length;
+    const dstBuf = dst.buffer;
+    const leftBuf = left.buffer;
+    const rightBuf = right.buffer;
+    const maskBuf = mask.buffer;
+    for (let i = 0;i < len; i++) {
+      dstBuf[i] = leftBuf[i] & ~maskBuf[i] | rightBuf[i] & maskBuf[i];
+    }
+  }
+}
+
+// src/buffer/bitmap.ts
+class Bitmap32 {
   cols;
+  stride;
   rows;
+  length;
   buffer;
-  dirtyBuffer;
-  dirty;
   constructor(cols, rows) {
-    this.cols = cols;
-    this.rows = rows;
-    this.buffer = new Uint32Array(cols * rows);
-    this.dirtyBuffer = new Uint8Array(cols * rows);
-    this.dirty = false;
-    this.clear(0);
+    this.cols = Math.max(cols, 1);
+    this.rows = Math.max(rows, 1);
+    this.length = this.cols * this.rows;
+    this.stride = this.cols;
+    this.buffer = new Uint32Array(this.length);
   }
-  clear(char_attr = 16711712) {
-    this.buffer.fill(char_attr);
-    this.dirtyBuffer.fill(1);
-    this.dirty = true;
+}
+
+// src/buffer/plain-buffer.ts
+class PlainBuffer {
+  _glyphs;
+  _generation = 0;
+  _generationBits = 0;
+  _dirtyGeneration = 255;
+  constructor(cols, rows) {
+    this._glyphs = new Bitmap32(cols, rows);
+    this._glyphs.buffer.fill(0);
   }
-  clearDirty() {
-    this.dirtyBuffer.fill(0);
-    this.dirty = false;
+  get generation() {
+    return this._generation;
   }
-  _set(c, r, char_attr) {
-    if (c >= 0 && c < this.cols && r >= 0 && r < this.rows) {
-      this.buffer[c + this.cols * r] = char_attr;
-      this.dirtyBuffer[c + this.cols * r] = 1;
+  set generation(generation) {
+    this._generation = generation;
+    this._generationBits = generation << 24;
+    this._dirtyGeneration = 255;
+  }
+  get generationBits() {
+    return this._generationBits;
+  }
+  get glyphs() {
+    return this._glyphs;
+  }
+  get dirty() {
+    return this._generation === this._dirtyGeneration;
+  }
+  get cols() {
+    return this._glyphs.cols;
+  }
+  get rows() {
+    return this._glyphs.rows;
+  }
+  clear(char_attr) {
+    Bitmap32Utils.Clear(this._glyphs, char_attr & 16777215 | this._generationBits);
+    this._dirtyGeneration = this._generation;
+  }
+  set(x, y, char_attr) {
+    Bitmap32Utils.Set(this._glyphs, x, y, char_attr & 16777215 | this._generationBits);
+    this._dirtyGeneration = this._generation;
+  }
+  hline(x, y, w, char_attr) {
+    Bitmap32Utils.HLine(this._glyphs, x, y, w, char_attr & 16777215 | this._generationBits);
+    this._dirtyGeneration = this._generation;
+  }
+  vline(x, y, h, char_attr) {
+    Bitmap32Utils.VLine(this._glyphs, x, y, h, char_attr & 16777215 | this._generationBits);
+    this._dirtyGeneration = this._generation;
+  }
+  fill(x, y, w, h, char_attr) {
+    Bitmap32Utils.Fill(this._glyphs, x, y, w, h, char_attr & 16777215 | this._generationBits);
+    this._dirtyGeneration = this._generation;
+  }
+  print(x, y, text, char_attr) {
+    Bitmap32Utils.Print(this._glyphs, x, y, text, char_attr & 16711680 | this._generationBits);
+    this._dirtyGeneration = this._generation;
+  }
+  border(x, y, w, h, char_attrs) {
+    if (char_attrs && char_attrs.length === 9) {
+      const char_attrs_gen = new Array(9);
+      for (let i = 0;i < 9; i++) {
+        char_attrs_gen[i] = char_attrs[i] & 16777215 | this._generationBits;
+      }
+      Bitmap32Utils.Border(this._glyphs, x, y, w, h, char_attrs_gen);
+      this._dirtyGeneration = this._generation;
     }
   }
-  print(c, r, text, char_attr) {
-    char_attr = char_attr & 4294901760;
-    for (let i = 0;i < text.length; i++) {
-      this._set(c, r, text.charCodeAt(i) | char_attr);
-      c++;
-    }
-    this.dirty = true;
+  blit(x, y, src, sx, sy, sw, sh) {
+    this._dirtyGeneration = this._generation;
   }
 }
 
@@ -438,9 +1011,45 @@ class Unnamed {
     this.palette.set(15, 245, 237, 186);
     this._atlas = new Atlas(this._palette);
     this._renderer = new Renderer(config.canvas, this._atlas, config.cols || 80, config.rows || 40);
-    this._tempBuffer = new RendererBuffer(this._renderer.cols, this._renderer.rows);
+    this._tempBuffer = new PlainBuffer(this._renderer.cols, this._renderer.rows);
+    this._renderer.clearColour = this.palette.getHexColour(0);
     this._renderer.buffer = this._tempBuffer;
     this._tempBuffer.print(0, 0, "Hello World!!", 4128768);
+    this._tempBuffer.print(2, 2, "\x00", 4128768);
+    this._tempBuffer.print(2, 4, "Vert:\x00\x01\x00\x02\x00\x03", 4128768);
+    this._tempBuffer.print(2, 5, "Horz:\x00\x04\x00\x05\x00\x06", 4128768);
+    this._tempBuffer.print(2, 6, "Bloc:\x00\x07\x00\b", 4128768);
+    this._tempBuffer.print(2, 7, `Text:\x00	\x00
+`, 4128768);
+    this._tempBuffer.print(2, 8, "Cor1:\x00\v\x00\f\x00\r\x00\x0E", 4128768);
+    this._tempBuffer.print(2, 9, "Cor2:\x00\x0F\x00\x10\x00\x11\x00\x12", 4128768);
+    this._tempBuffer.print(2, 10, "Cor3:\x00\x13\x00\x14\x00\x15\x00\x16", 4128768);
+    this._tempBuffer.print(2, 11, "Shad:\x00\x17\x00\x18\x00\x19", 4128768);
+    this._tempBuffer.print(2, 12, "Patn:\x00\x1A\x00\x1B", 4128768);
+    this._tempBuffer.print(2, 13, "Rsvd:\x00\x1C\x00\x1D\x00\x1E\x00\x1F", 4128768);
+    this._tempBuffer.print(8, 1, "[]MWgy#£!|", 4128768);
+    this._tempBuffer.border(9, 14, 30, 10, [
+      19 | 983040,
+      6 | 983040,
+      20 | 983040,
+      3 | 983040,
+      0 | 2752512,
+      1 | 983040,
+      21 | 983040,
+      4 | 983040,
+      22 | 983040
+    ]);
+    this._tempBuffer.border(9, 25, 30, 10, [
+      19 | 983040,
+      6 | 983040,
+      20 | 983040,
+      3 | 983040,
+      26 | 917504,
+      25 | 983040,
+      21 | 983040,
+      23 | 983040,
+      24 | 983040
+    ]);
     window.addEventListener("resize", () => {
       this._resizeNeeded = true;
     });

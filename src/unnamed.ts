@@ -1,7 +1,8 @@
 import { type Colour, Palette} from "./renderer/palette.ts";
 import { Renderer} from "./renderer/renderer.ts";
 import { Atlas } from "./atlas/atlas.ts";
-import { RendererBuffer } from "./renderer/renderer-buffer.ts";
+
+import {PlainBuffer} from "./buffer/plain-buffer.ts";
 
 export const DefaultPalette = [
     '#1f0e1c',  // 0  - Near black (dark purple)
@@ -35,7 +36,7 @@ export class Unnamed {
     private _palette = new Palette();
     private _tickTimer: ReturnType<typeof setInterval> | null = null;
     private _resizeNeeded: boolean = false;
-    private _tempBuffer:RendererBuffer;
+    private _tempBuffer:PlainBuffer;
 
     constructor(config:UnnamedConfig) {
 
@@ -60,9 +61,60 @@ export class Unnamed {
 
         this._atlas = new Atlas(this._palette);
         this._renderer = new Renderer(config.canvas, this._atlas, config.cols || 80, config.rows || 40);
-        this._tempBuffer = new RendererBuffer(this._renderer.cols, this._renderer.rows);
+        this._tempBuffer = new PlainBuffer(this._renderer.cols, this._renderer.rows);
+        this._renderer.clearColour = this.palette.getHexColour(0);
         this._renderer.buffer = this._tempBuffer;
         this._tempBuffer.print(0,0, "Hello World!!", 0x003F0000);
+        this._tempBuffer.print(2,2, "\x00", 0x003F0000);
+        this._tempBuffer.print(2,4, "Vert:\x00\x01\x00\x02\x00\x03", 0x003F0000);
+        this._tempBuffer.print(2,5, "Horz:\x00\x04\x00\x05\x00\x06", 0x003F0000);
+        this._tempBuffer.print(2,6, "Bloc:\x00\x07\x00\x08", 0x003F0000);
+        this._tempBuffer.print(2,7, "Text:\x00\x09\x00\x0A", 0x003F0000);
+        this._tempBuffer.print(2,8, "Cor1:\x00\x0B\x00\x0C\x00\x0D\x00\x0E", 0x003F0000);
+        this._tempBuffer.print(2,9, "Cor2:\x00\x0F\x00\x10\x00\x11\x00\x12", 0x003F0000);
+        this._tempBuffer.print(2,10, "Cor3:\x00\x13\x00\x14\x00\x15\x00\x16", 0x003F0000);
+        this._tempBuffer.print(2,11, "Shad:\x00\x17\x00\x18\x00\x19", 0x003F0000);
+        this._tempBuffer.print(2,12, "Patn:\x00\x1A\x00\x1B", 0x003F0000);
+        this._tempBuffer.print(2,13, "Rsvd:\x00\x1C\x00\x1D\x00\x1E\x00\x1F", 0x003F0000);
+
+        //this._tempBuffer.print(2,6, "\x05\x00\x06\x00\x07\x00\x08\x00\x09\x00\x0A", 0x003F0000);
+
+
+        this._tempBuffer.print(8,1, "[]MWgy#£!|", 0x003F0000);
+        //this._tempBuffer.print(2,8, "\x08\x09\x0a", 0x003F0000);
+
+        //this._tempBuffer.fill(2, 5, 40, 6, 0x004E0054);
+
+        this._tempBuffer.border(9, 14, 30, 10,
+            [
+                19 | 0x000F0000,
+                6 | 0x000F0000,
+                20 | 0x000F0000,
+
+                3 | 0x000F0000,
+                0 | 0x002A0000,
+                1 | 0x000F0000,
+
+                21 | 0x000F0000,
+                4 | 0x000F0000,
+                22 | 0x000F0000,
+            ])
+
+
+        this._tempBuffer.border(9, 25, 30, 10,
+            [
+                19 | 0x000F0000,
+                6 | 0x000F0000,
+                20 | 0x000F0000,
+
+                3 | 0x000F0000,
+                26 | 0x000E0000,
+                25 | 0x000F0000,
+
+                21 | 0x000F0000,
+                23 | 0x000F0000,
+                24 | 0x000F0000,
+            ])
 
         window.addEventListener("resize", () => {
             this._resizeNeeded = true;

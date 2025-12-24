@@ -3,7 +3,8 @@ import { watch, readFileSync } from "fs";
 const devClients = new Set<{ send: (msg: string) => void }>();
 
 const server = Bun.serve({
-  port: 8080,
+  hostname: '0.0.0.0',
+  port: 8000,
   fetch(req) {
     const url = new URL(req.url);
 
@@ -29,9 +30,10 @@ const server = Bun.serve({
     }
 
     if (url.pathname === "/__dev") {
-      if (server.upgrade(req, { data: { isDev: true } })) {
+      if (server.upgrade(req)) {
         return;
       }
+      console.error("WebSocket upgrade failed");
       return new Response("WebSocket upgrade failed", { status: 400 });
     }
 
@@ -39,17 +41,17 @@ const server = Bun.serve({
   },
   websocket: {
     open(ws) {
-      if (ws.data?.isDev) {
-        devClients.add(ws);
-      }
+      ws.id = Math.floor(Math.random() * 10000);
+      console.log("open", ws.id, ws.remoteAddress);
+      ws.sendText("Hello-" + ws.id.toString());
+      devClients.add(ws);
     },
     message(ws, message) {
-      // Reserved for app websocket use
+      console.log("message", ws.id, ws.remoteAddress, message);
     },
     close(ws) {
-      if (ws.data?.isDev) {
-        devClients.delete(ws);
-      }
+      console.log("closed", ws.id, ws.remoteAddress);
+      devClients.delete(ws);
     },
   },
 });
@@ -61,11 +63,13 @@ watch(".", (event, filename) => {
   if (filename === "demo.js") {
     if (reloadTimeout) clearTimeout(reloadTimeout);
     reloadTimeout = setTimeout(() => {
+      console.log("RELOAD!!!!");
       for (const client of devClients) {
+        console.log(client);
         client.send("reload");
       }
     }, 250);
   }
 });
 
-console.log(`Server running at http://localhost:${server.port}`);
+console.log(`Server running at http://${server.hostname}:${server.port}`);
