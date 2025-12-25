@@ -180,31 +180,68 @@ export class Unnamed {
         }
         this._tempBuffer.print(i, 0, "<", 0x003F0000);
         this._tempBuffer.print(i, 1, "<", 0x003F0000);
-        this._tempBuffer.print(0,3, "Hello World!!", 0x003F0000);
-        this._tempBuffer.print(2,4, "\x00", 0x003F0000);
-        this._tempBuffer.print(2,5, "Vert:\x00\x01\x00\x02\x00\x03", 0x003F0000);
-        this._tempBuffer.print(2,6, "Horz:\x00\x04\x00\x05\x00\x06", 0x003F0000);
-        this._tempBuffer.print(2,7, "Bloc:\x00\x07\x00\x08", 0x003F0000);
-        this._tempBuffer.print(2,8, "Text:\x00\x09\x00\x0A", 0x003F0000);
-        this._tempBuffer.print(2,9, "Cor1:\x00\x0B\x00\x0C\x00\x0D\x00\x0E", 0x003F0000);
-        this._tempBuffer.print(2,10, "Cor2:\x00\x0F\x00\x10\x00\x11\x00\x12", 0x003F0000);
-        this._tempBuffer.print(2,11, "Cor3:\x00\x13\x00\x14\x00\x15\x00\x16", 0x003F0000);
-        this._tempBuffer.print(2,12, "Shad:\x00\x17\x00\x18\x00\x19", 0x003F0000);
-        this._tempBuffer.print(2,13, "Patn:\x00\x1A\x00\x1B", 0x003F0000);
-        this._tempBuffer.print(2,14, "Rsvd:\x00\x1C\x00\x1D\x00\x1E\x00\x1F", 0x003F0000);
-
-        //this._tempBuffer.print(2,6, "\x05\x00\x06\x00\x07\x00\x08\x00\x09\x00\x0A", 0x003F0000);
-
-        this._tempBuffer.print(15,3, "[]MWgy#£!|", 0x003F0000);
-        //this._tempBuffer.print(2,8, "\x08\x09\x0a", 0x003F0000);
-        //this._tempBuffer.fill(2, 5, 40, 6, 0x004E0054);
+        this._tempBuffer.print(2,3, "[]MWgy#£!|", 0x003F0000);
+        i = 0;
+        let k = 2, j = 5;
+        for(;i < 32;i++) {
+            this._tempBuffer.print(k, j, String.fromCharCode(i), 0x003F0000);
+            k+=2;
+            if (k == 10) {
+                k = 2;
+                j += 2;
+            }
+        }
+        /*
+        this._tempBuffer.print(2,5, "Vert: \x01 \x02 \x03", 0x003F0000);
+        this._tempBuffer.print(2,6, "Horz: \x04 \x05 \x06", 0x003F0000);
+        this._tempBuffer.print(2,7, "Bloc: \x07 \x08", 0x003F0000);
+        this._tempBuffer.print(2,8, "Text: \x09 \x0A", 0x003F0000);
+        this._tempBuffer.print(2,9, "Cor1: \x0B \x0C \x0D \x0E", 0x003F0000);
+        this._tempBuffer.print(2,10, "Cor2: \x0F \x10 \x11 \x12", 0x003F0000);
+        this._tempBuffer.print(2,11, "Cor3: \x13 \x14 \x15 \x16", 0x003F0000);
+        this._tempBuffer.print(2,12, "Shad: \x17 \x18 \x19", 0x003F0000);
+        this._tempBuffer.print(2,13, "Patn: \x1A \x1B", 0x003F0000);
+        this._tempBuffer.print(2,14, "Rsvd: \x1C \x1D \x1E \x1F", 0x003F0000);
+        */
+        const textStrings = [
+            // Basic ASCII (fast path, direct)
+            "Hello World",
+            // Latin-1 extended (fast path, direct)
+            "Café naïve £100",
+            // Cyrillic (segmenter, but direct - single chars ≤0x7FFF)
+            "Привет мир",
+            // Greek (segmenter, but direct)
+            "Γειά σου",
+            // CJK (segmenter, dictionary - above 0x7FFF)
+            "你好世界",
+            // Arabic (segmenter, direct - 0x0600-0x06FF range)
+            "مرحبا",
+            // Emoji - single (segmenter, dictionary - surrogate pair)
+            "Hello 🎉 World",
+            // Emoji with skin tone modifier (segmenter, dictionary - multi-codepoint grapheme)
+            "Wave 👋🏽 here",
+            // Multiple skin tones to compare
+            "👋👋🏻👋🏼👋🏽👋🏾👋🏿",
+            // ZWJ family sequence (segmenter, dictionary - single grapheme, many codepoints)
+            "Family: 👨‍👩‍👧‍👦",
+            // Flag (segmenter, dictionary - two regional indicators)
+            "UK: 🇬🇧 US: 🇺🇸",
+            // Combining diacritics (segmenter, should become single grapheme)
+            "e\u0301",
+            // Mixed stress test
+            "Héllo 世界 🇬🇧 Привет 👨‍👩‍👧"
+        ];
 
         for(i=0;i < 16;i++) {
-            this._tempBuffer.print(15+i*3, 4, '\x00\x00\x00', (i) << 16);
-            this._tempBuffer.print(15+i*3, 5, i.toString().padStart(3, ' ') , (i) << 16);
+            this._tempBuffer.print(15+i*3, 2, '   ', i << 20);
+            this._tempBuffer.print(15+i*3, 3, i.toString().padStart(3, ' ') , (i) << 16);
         }
 
-        this._tempBuffer.border(9, 14, 30, 10,
+        for(i=0;i < textStrings.length;i++) {
+            this._tempBuffer.print(16, 4+i, textStrings[i]!,( (i +2) << 4 | 0xF) << 16);
+        }
+
+        this._tempBuffer.border(9, 18, 30, 10,
             [
                 19 | 0x000F0000,
                 6 | 0x000F0000,
@@ -220,7 +257,7 @@ export class Unnamed {
             ])
 
 
-        this._tempBuffer.border(9, 25, 30, 10,
+        this._tempBuffer.border(9, 28, 30, 10,
             [
                 19 | 0x000F0000,
                 6 | 0x000F0000,
@@ -235,7 +272,7 @@ export class Unnamed {
                 24 | 0x000F0000,
             ])
 
-        this._tempBuffer.border(40, 14, 30, 10,
+        this._tempBuffer.border(40, 18, 30, 10,
             [
                 19 | 0x00080000,
                 6 | 0x00080000,
@@ -250,7 +287,7 @@ export class Unnamed {
                 24 | 0x00080000,
             ])
 
-        this._tempBuffer.border(40, 25, 30, 10,
+        this._tempBuffer.border(40, 28, 30, 10,
             [
                 15 | 0x00050000,
                 5 | 0x00050000,

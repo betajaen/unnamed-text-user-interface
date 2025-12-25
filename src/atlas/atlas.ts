@@ -2,21 +2,11 @@ import { Palette } from "../renderer/palette.ts";
 import { AtlasSheet } from "./atlas-sheet.ts";
 import { type AtlasGlyph } from "./atlas-glyph.ts";
 import type {RendererMetrics} from "../metrics.ts";
+import {TextTools} from "../text-tools.ts";
 
 const FONT_FAMILY = '"Cascadia Code", Menlo, monospace';
 const ASCENT_GLYPHS = ['M', '[', '|'];
 const DESCENT_GLYPHS = ['g', 'M', '|'];
-
-const SPECIAL_GLYPHS:string[] = [
-    "\u258c", // 50% horz
-    "\u2584", // 50% vert
-    "\u2594", // 12.5% horz-top
-    "\u2581" //  12.5% horz-bottom
-]
-
-function isBoxDrawing(charCode: number): boolean {
-    return charCode >= 0x2500 && charCode <= 0x257F;
-}
 
 export class Atlas {
     private _palette:Palette;
@@ -148,21 +138,59 @@ export class Atlas {
         const ctx = this._tempContext;
 
         if (char > 32) {
+            ctx.save();
+
+
+            let charStr:string;
+
             ctx.fillStyle = this._palette.getHexColourChecked(bg);
             ctx.fillRect(0, 0, this._realCellW, this._realCellH);
 
-            ctx.fillStyle = this._palette.getHexColourChecked(fg);
-            ctx.textBaseLine = 'alphabetic';
+            if (char >= 0x8000) {
+                charStr = TextTools.getGlyph(char - 0x8000);
+            }
+            else {
+                charStr = String.fromCharCode(char);
+            }
 
-            const charStr = String.fromCharCode(char);
             const metrics = ctx.measureText(charStr);
-            const charX = Math.round((this._realCellW - metrics.width) / 2);
-            const charY = Math.round(((this._realCellH - this._fontHeight) / 2) + this._fontAscent);
+            const width = metrics.width;
+            const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
 
-            ctx.fillText(charStr, charX, charY);
+            if (width > this._realCellW || height > this._realCellH) {
+
+                const scaleFactorX =  this._realCellW / width;
+                const scaleFactorY =  this._realCellH / height;
+                const scaleFactor = Math.min(scaleFactorX, scaleFactorY);
+
+                ctx.translate(this._realCellW / 2, this._realCellH / 2);
+                ctx.scale(scaleFactor, scaleFactor);
+                ctx.translate(-this._realCellW / 2, -this._realCellH / 2);
+
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                const charX = this._realCellW / 2; // Math.round((this._realCellW - metrics.width) / 2);
+                const charY = this._realCellH / 2; // Math.round(((this._realCellH - this._fontHeight) / 2) + this._fontAscent);
+
+                ctx.fillStyle = this._palette.getHexColourChecked(fg);
+                ctx.fillText(charStr, charX, charY);
+            }
+            else {
+                ctx.textBaseline = 'alphabetic';
+                const charX = Math.round((this._realCellW - metrics.width) / 2);
+                const charY = Math.round(((this._realCellH - this._fontHeight) / 2) + this._fontAscent);
+
+                ctx.fillStyle = this._palette.getHexColourChecked(fg);
+                ctx.fillText(charStr, charX, charY);
+            }
+
+            ctx.restore();
         }
         else {
+            ctx.save();
             this.renderSpecial(ctx, char, fg, bg);
+            ctx.restore();
         }
 
         for(const sheet of this._sheets) {
@@ -250,6 +278,7 @@ export class Atlas {
             ctx.fillStyle = this._palette.getHexColourChecked(bg);
             ctx.fillRect(0, 0, w, h);
             ctx.fillStyle = this._palette.getHexColourChecked(fg);
+            ctx.strokeStyle = this._palette.getHexColourChecked(fg);
             ctx.lineWidth = 0;
 
             const hh = h / 2;
@@ -546,8 +575,8 @@ export class Atlas {
             ctx.fillStyle = this._palette.getHexColourChecked(bg);
             ctx.fillRect(0, 0, w, h);
             ctx.beginPath();
-            ctx.fillStyle = this._palette.getHexColourChecked(fg);
-            ctx.lineWidth = gs/4;
+            ctx.strokeStyle = this._palette.getHexColourChecked(fg);
+            ctx.lineWidth = gs;
             ctx.moveTo(0, 0);
             ctx.lineTo(w, h);
             ctx.moveTo(w, 0);

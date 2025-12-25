@@ -1,4 +1,5 @@
 import type {Bitmap32} from "./bitmap.ts";
+import { TextTools } from "../text-tools.ts";
 
 export class Bitmap32Utils {
 
@@ -13,6 +14,14 @@ export class Bitmap32Utils {
     }
 
     static Print(dst:Bitmap32, x: number, y:number, text: string, attr:number) {
+        if (TextTools.isLatin(text)) {
+            Bitmap32Utils.PrintEncoded(dst, x, y, text, attr);
+        }
+        else {
+            Bitmap32Utils.PrintEncoded(dst, x, y, TextTools.encode(text), attr);
+        }
+    }
+    static PrintEncoded(dst:Bitmap32, x: number, y:number, text: string, attr:number) {
         if (!dst)
             return;
 
@@ -20,8 +29,6 @@ export class Bitmap32Utils {
         const cols = dst.cols;
         const rows = dst.rows;
         const buf = dst.buffer;
-
-        console.log(stride);
 
         if (y < 0 || y >= rows)
             return;

@@ -285,10 +285,58 @@ class AtlasSheet {
   }
 }
 
+// src/text-tools.ts
+class TextTools {
+  static _glyphs = new Map;
+  static _glyphsReverse = new Map;
+  static _nextIndex = 1;
+  static _seg = new Intl.Segmenter("en", { granularity: "grapheme" });
+  static getOrAdd(glyph) {
+    let index = TextTools._glyphs.get(glyph);
+    if (index === undefined) {
+      index = TextTools._nextIndex++;
+      TextTools._glyphs.set(glyph, index);
+      TextTools._glyphsReverse.set(index, glyph);
+    }
+    return index;
+  }
+  static getGlyph(index) {
+    const str = TextTools._glyphsReverse.get(index);
+    if (str === undefined) {
+      throw `Unknown glyph ${index}`;
+    }
+    return str;
+  }
+  static isLatin(str) {
+    for (let i = 0;i < str.length; i++) {
+      if (str.charCodeAt(i) >= 255) {
+        return false;
+      }
+    }
+    return true;
+  }
+  static encode(str) {
+    let outStr = "";
+    for (const segment of TextTools._seg.segment(str)) {
+      const glyph = segment.segment;
+      if (glyph.length == 1) {
+        if (glyph.charCodeAt(0) < 32768) {
+          outStr += glyph;
+          continue;
+        }
+      }
+      const num = 32768 + TextTools.getOrAdd(glyph);
+      outStr += String.fromCharCode(num);
+    }
+    return outStr;
+  }
+}
+
 // src/atlas/atlas.ts
 var FONT_FAMILY = '"Cascadia Code", Menlo, monospace';
 var ASCENT_GLYPHS = ["M", "[", "|"];
 var DESCENT_GLYPHS = ["g", "M", "|"];
+
 class Atlas {
   _palette;
   _sheets = new Array;
@@ -394,17 +442,43 @@ class Atlas {
     const bg = attr >> 4 & 15;
     const ctx = this._tempContext;
     if (char > 32) {
+      ctx.save();
+      let charStr;
       ctx.fillStyle = this._palette.getHexColourChecked(bg);
       ctx.fillRect(0, 0, this._realCellW, this._realCellH);
-      ctx.fillStyle = this._palette.getHexColourChecked(fg);
-      ctx.textBaseLine = "alphabetic";
-      const charStr = String.fromCharCode(char);
+      if (char >= 32768) {
+        charStr = TextTools.getGlyph(char - 32768);
+      } else {
+        charStr = String.fromCharCode(char);
+      }
       const metrics = ctx.measureText(charStr);
-      const charX = Math.round((this._realCellW - metrics.width) / 2);
-      const charY = Math.round((this._realCellH - this._fontHeight) / 2 + this._fontAscent);
-      ctx.fillText(charStr, charX, charY);
+      const width = metrics.width;
+      const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+      if (width > this._realCellW || height > this._realCellH) {
+        const scaleFactorX = this._realCellW / width;
+        const scaleFactorY = this._realCellH / height;
+        const scaleFactor = Math.min(scaleFactorX, scaleFactorY);
+        ctx.translate(this._realCellW / 2, this._realCellH / 2);
+        ctx.scale(scaleFactor, scaleFactor);
+        ctx.translate(-this._realCellW / 2, -this._realCellH / 2);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const charX = this._realCellW / 2;
+        const charY = this._realCellH / 2;
+        ctx.fillStyle = this._palette.getHexColourChecked(fg);
+        ctx.fillText(charStr, charX, charY);
+      } else {
+        ctx.textBaseline = "alphabetic";
+        const charX = Math.round((this._realCellW - metrics.width) / 2);
+        const charY = Math.round((this._realCellH - this._fontHeight) / 2 + this._fontAscent);
+        ctx.fillStyle = this._palette.getHexColourChecked(fg);
+        ctx.fillText(charStr, charX, charY);
+      }
+      ctx.restore();
     } else {
+      ctx.save();
       this.renderSpecial(ctx, char, fg, bg);
+      ctx.restore();
     }
     for (const sheet2 of this._sheets) {
       const entry2 = sheet2.allocate(this._realCellW, this._realCellH);
@@ -476,6 +550,7 @@ class Atlas {
       ctx.fillStyle = this._palette.getHexColourChecked(bg);
       ctx.fillRect(0, 0, w, h);
       ctx.fillStyle = this._palette.getHexColourChecked(fg);
+      ctx.strokeStyle = this._palette.getHexColourChecked(fg);
       ctx.lineWidth = 0;
       const hh = h / 2;
       const ww = w / 4;
@@ -697,8 +772,8 @@ class Atlas {
       ctx.fillStyle = this._palette.getHexColourChecked(bg);
       ctx.fillRect(0, 0, w, h);
       ctx.beginPath();
-      ctx.fillStyle = this._palette.getHexColourChecked(fg);
-      ctx.lineWidth = gs / 4;
+      ctx.strokeStyle = this._palette.getHexColourChecked(fg);
+      ctx.lineWidth = gs;
       ctx.moveTo(0, 0);
       ctx.lineTo(w, h);
       ctx.moveTo(w, 0);
@@ -719,13 +794,19 @@ class Bitmap32Utils {
     }
   }
   static Print(dst, x, y, text, attr) {
+    if (TextTools.isLatin(text)) {
+      Bitmap32Utils.PrintEncoded(dst, x, y, text, attr);
+    } else {
+      Bitmap32Utils.PrintEncoded(dst, x, y, TextTools.encode(text), attr);
+    }
+  }
+  static PrintEncoded(dst, x, y, text, attr) {
     if (!dst)
       return;
     const stride = dst.stride;
     const cols = dst.cols;
     const rows = dst.rows;
     const buf = dst.buffer;
-    console.log(stride);
     if (y < 0 || y >= rows)
       return;
     const len = text.length;
@@ -1148,25 +1229,40 @@ class Unnamed {
     }
     this._tempBuffer.print(i, 0, "<", 4128768);
     this._tempBuffer.print(i, 1, "<", 4128768);
-    this._tempBuffer.print(0, 3, "Hello World!!", 4128768);
-    this._tempBuffer.print(2, 4, "\x00", 4128768);
-    this._tempBuffer.print(2, 5, "Vert:\x00\x01\x00\x02\x00\x03", 4128768);
-    this._tempBuffer.print(2, 6, "Horz:\x00\x04\x00\x05\x00\x06", 4128768);
-    this._tempBuffer.print(2, 7, "Bloc:\x00\x07\x00\b", 4128768);
-    this._tempBuffer.print(2, 8, `Text:\x00	\x00
-`, 4128768);
-    this._tempBuffer.print(2, 9, "Cor1:\x00\v\x00\f\x00\r\x00\x0E", 4128768);
-    this._tempBuffer.print(2, 10, "Cor2:\x00\x0F\x00\x10\x00\x11\x00\x12", 4128768);
-    this._tempBuffer.print(2, 11, "Cor3:\x00\x13\x00\x14\x00\x15\x00\x16", 4128768);
-    this._tempBuffer.print(2, 12, "Shad:\x00\x17\x00\x18\x00\x19", 4128768);
-    this._tempBuffer.print(2, 13, "Patn:\x00\x1A\x00\x1B", 4128768);
-    this._tempBuffer.print(2, 14, "Rsvd:\x00\x1C\x00\x1D\x00\x1E\x00\x1F", 4128768);
-    this._tempBuffer.print(15, 3, "[]MWgy#£!|", 4128768);
-    for (i = 0;i < 16; i++) {
-      this._tempBuffer.print(15 + i * 3, 4, "\x00\x00\x00", i << 16);
-      this._tempBuffer.print(15 + i * 3, 5, i.toString().padStart(3, " "), i << 16);
+    this._tempBuffer.print(2, 3, "[]MWgy#£!|", 4128768);
+    i = 0;
+    let k = 2, j = 5;
+    for (;i < 32; i++) {
+      this._tempBuffer.print(k, j, String.fromCharCode(i), 4128768);
+      k += 2;
+      if (k == 10) {
+        k = 2;
+        j += 2;
+      }
     }
-    this._tempBuffer.border(9, 14, 30, 10, [
+    const textStrings = [
+      "Hello World",
+      "Café naïve £100",
+      "Привет мир",
+      "Γειά σου",
+      "你好世界",
+      "مرحبا",
+      "Hello \uD83C\uDF89 World",
+      "Wave \uD83D\uDC4B\uD83C\uDFFD here",
+      "\uD83D\uDC4B\uD83D\uDC4B\uD83C\uDFFB\uD83D\uDC4B\uD83C\uDFFC\uD83D\uDC4B\uD83C\uDFFD\uD83D\uDC4B\uD83C\uDFFE\uD83D\uDC4B\uD83C\uDFFF",
+      "Family: \uD83D\uDC68‍\uD83D\uDC69‍\uD83D\uDC67‍\uD83D\uDC66",
+      "UK: \uD83C\uDDEC\uD83C\uDDE7 US: \uD83C\uDDFA\uD83C\uDDF8",
+      "é",
+      "Héllo 世界 \uD83C\uDDEC\uD83C\uDDE7 Привет \uD83D\uDC68‍\uD83D\uDC69‍\uD83D\uDC67"
+    ];
+    for (i = 0;i < 16; i++) {
+      this._tempBuffer.print(15 + i * 3, 2, "   ", i << 20);
+      this._tempBuffer.print(15 + i * 3, 3, i.toString().padStart(3, " "), i << 16);
+    }
+    for (i = 0;i < textStrings.length; i++) {
+      this._tempBuffer.print(16, 4 + i, textStrings[i], (i + 2 << 4 | 15) << 16);
+    }
+    this._tempBuffer.border(9, 18, 30, 10, [
       19 | 983040,
       6 | 983040,
       20 | 196608,
@@ -1177,7 +1273,7 @@ class Unnamed {
       4 | 196608,
       22 | 196608
     ]);
-    this._tempBuffer.border(9, 25, 30, 10, [
+    this._tempBuffer.border(9, 28, 30, 10, [
       19 | 983040,
       6 | 983040,
       20 | 983040,
@@ -1188,7 +1284,7 @@ class Unnamed {
       23 | 983040,
       24 | 983040
     ]);
-    this._tempBuffer.border(40, 14, 30, 10, [
+    this._tempBuffer.border(40, 18, 30, 10, [
       19 | 524288,
       6 | 524288,
       20 | 524288,
@@ -1199,7 +1295,7 @@ class Unnamed {
       23 | 524288,
       24 | 524288
     ]);
-    this._tempBuffer.border(40, 25, 30, 10, [
+    this._tempBuffer.border(40, 28, 30, 10, [
       15 | 327680,
       5 | 327680,
       16 | 327680,
