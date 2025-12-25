@@ -8,7 +8,7 @@ export class Bitmap32Utils {
 
     static Set(dst:Bitmap32, x:number, y:number, value:number) {
         if (x >= 0 && x < dst.cols && y >=0 && y < dst.rows) {
-            dst.buffer[x + (y * dst.cols)] = value;
+            dst.buffer[x + (y * dst.stride)] = value;
         }
     }
 
@@ -16,9 +16,12 @@ export class Bitmap32Utils {
         if (!dst)
             return;
 
+        const stride = dst.stride;
         const cols = dst.cols;
         const rows = dst.rows;
         const buf = dst.buffer;
+
+        console.log(stride);
 
         if (y < 0 || y >= rows)
             return;
@@ -32,7 +35,7 @@ export class Bitmap32Utils {
 
         const textStart = left - x;
         const width = right - left;
-        let offset = left + (y * cols);
+        let offset = left + (y * stride);
 
         for(let i=textStart;i < textStart + width; i++) {
             buf[offset++] = (text.charCodeAt(i) & 0xFFFF) | attr;
@@ -43,6 +46,7 @@ export class Bitmap32Utils {
         if (!dst)
             return;
 
+        const stride = dst.stride;
         const cols = dst.cols;
         const rows = dst.rows;
         const buf = dst.buffer;
@@ -56,13 +60,14 @@ export class Bitmap32Utils {
         if (left >= right)
             return;
 
-        buf.fill(value, left + (y * cols), right + (y * cols));
+        buf.fill(value, left + (y * stride), right + (y * stride));
     }
 
     static VLine(dst:Bitmap32, x: number, y:number, h:number, value: number) {
         if (!dst)
             return;
 
+        const stride = dst.stride;
         const cols = dst.cols;
         const rows = dst.rows;
         const buf = dst.buffer;
@@ -76,10 +81,10 @@ export class Bitmap32Utils {
         if (top >= bottom)
             return;
 
-        let offset = x + (top * cols);
+        let offset = x + (top * stride);
         for(let row = top; row < bottom; row++) {
             buf[offset] = value;
-            offset += cols;
+            offset += stride;
         }
     }
 
@@ -87,6 +92,7 @@ export class Bitmap32Utils {
         if (!dst)
             return;
 
+        const stride = dst.stride;
         const cols = dst.cols;
         const rows = dst.rows;
         const buf = dst.buffer;
@@ -100,10 +106,10 @@ export class Bitmap32Utils {
             return;
 
         const width = right - left;
-        let offset = left + (top * cols);
+        let offset = left + (top * stride);
         for(let row = top; row < bottom; row++) {
             buf.fill(value, offset, offset + width);
-            offset += cols;
+            offset += stride;
         }
     }
 
@@ -144,9 +150,11 @@ export class Bitmap32Utils {
         if (!dst || !src || dst == src)
             return;
 
+        const srcStride = src.stride;
         const srcCols = src.cols;
         const srcRows = src.rows;
         const srcBuf = src.buffer;
+        const dstStride = dst.stride;
         const dstCols = dst.cols;
         const dstRows = dst.rows;
         const dstBuf = dst.buffer;
@@ -166,13 +174,13 @@ export class Bitmap32Utils {
         if (dstX + w > dstCols || dstY + h > dstRows) return;
         if (srcX + w > srcCols || srcY + h > srcRows) return;
 
-        let srcOffset = srcX + (srcY * srcCols);
-        let dstOffset = dstX + (dstY * dstCols);
+        let srcOffset = srcX + (srcY * srcStride);
+        let dstOffset = dstX + (dstY * dstStride);
 
         for (let row = 0; row < h; row++) {
             dstBuf.set(srcBuf.subarray(srcOffset, srcOffset + w), dstOffset);
-            srcOffset += srcCols;
-            dstOffset += dstCols;
+            srcOffset += srcStride;
+            dstOffset += dstStride;
         }
     }
 
@@ -184,10 +192,10 @@ export class Bitmap32Utils {
         if (!dst || !left)
             return;
 
-        if (dst.length != left.length)
+        if (dst.maxSize != left.maxSize)
             return;
 
-        const len = dst.length;
+        const len = dst.maxSize;
         const dstBuf = dst.buffer;
         const leftBuf = left.buffer;
 
@@ -203,10 +211,10 @@ export class Bitmap32Utils {
         if (!dst || !left || !right)
             return;
 
-        if (left.length != right.length || dst.length != left.length)
+        if (left.maxSize != right.maxSize || dst.maxSize != left.maxSize)
             return;
 
-        const len = dst.length;
+        const len = dst.maxSize;
         const dstBuf = dst.buffer;
         const leftBuf = left.buffer;
         const rightBuf = right.buffer;
@@ -226,10 +234,10 @@ export class Bitmap32Utils {
         if (!dst || !left || !right || !mask)
             return;
 
-        if (left.length != right.length || dst.length != mask.length || left.length != mask.length)
+        if (left.maxSize != right.maxSize || dst.maxSize != mask.maxSize || left.maxSize != mask.maxSize)
             return;
 
-        const len = dst.length;
+        const len = dst.maxSize;
         const dstBuf = dst.buffer;
         const leftBuf = left.buffer;
         const rightBuf = right.buffer;

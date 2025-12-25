@@ -21,6 +21,17 @@ class Palette {
     this._colours[idx] = col;
     this._hexColours[idx] = colourToHex(col);
   }
+  setFrom(palette) {
+    const lim = Math.min(16, palette.length);
+    for (let i = 0;i < lim; i++) {
+      const col = palette[i];
+      if (col === undefined) {
+        this.set(i, 0, 0, 0);
+      } else {
+        this.set(i, col.r, col.g, col.b);
+      }
+    }
+  }
   getHexColourChecked(idx) {
     return this._hexColours[idx];
   }
@@ -42,10 +53,7 @@ class RendererUtils {
     if (renderer === undefined || buffer === undefined || dst === undefined || atlas === undefined) {
       return;
     }
-    if (renderer.cols * renderer.rows != buffer.glyphs.length) {
-      return;
-    }
-    let x = 0, y = 0, idx = 0, stride = buffer.cols, rows = buffer.rows;
+    let x = 0, y = 0, idx = 0, tidx = 0, cols = 0, stride = buffer.stride, rows = buffer.rows;
     let srcSheetNum = -1;
     let srcSheet;
     const buf = buffer.glyphs.buffer;
@@ -54,8 +62,9 @@ class RendererUtils {
     const scaledW = cellW * renderer.dpr;
     const scaledH = cellH * renderer.dpr;
     while (rows--) {
-      stride = buffer.cols;
-      while (stride--) {
+      tidx = idx;
+      cols = buffer.cols;
+      while (cols--) {
         const char_attr = buf[idx++];
         if (char_attr !== 0) {
           const entry = atlas.get(char_attr);
@@ -69,16 +78,14 @@ class RendererUtils {
       }
       x = 0;
       y += cellH;
+      idx = tidx + stride;
     }
   }
   static RenderCopyTested(dst, renderer, buffer, atlas) {
     if (renderer === undefined || buffer === undefined || dst === undefined || atlas === undefined) {
       return;
     }
-    if (renderer.cols * renderer.rows != buffer.glyphs.length) {
-      return;
-    }
-    let x = 0, y = 0, idx = 0, stride = buffer.cols, rows = buffer.rows;
+    let x = 0, y = 0, idx = 0, tidx = 0, cols = 0, stride = buffer.stride, rows = buffer.rows;
     let srcSheetNum = -1;
     let srcSheet;
     const buf = buffer.glyphs.buffer;
@@ -88,11 +95,11 @@ class RendererUtils {
     const scaledW = cellW * renderer.dpr;
     const scaledH = cellH * renderer.dpr;
     while (rows--) {
-      stride = buffer.cols;
-      while (stride--) {
+      tidx = idx;
+      cols = buffer.cols;
+      while (cols--) {
         const char_attr = buf[idx++];
         if ((char_attr & 4278190080) !== genBits) {
-          idx++;
           x += cellW;
           continue;
         }
@@ -108,52 +115,45 @@ class RendererUtils {
       }
       x = 0;
       y += cellH;
+      idx = tidx + stride;
     }
   }
 }
 
 // src/renderer/renderer.ts
-var CHAR_ASPECT = 0.6;
-
 class Renderer {
   _canvas;
   _ctx;
   _atlas;
-  _cols;
-  _rows;
+  _cols = 0;
+  _rows = 0;
   _dpr = 1;
   _cellW = 0;
   _cellH = 0;
   _viewW = 0;
   _viewH = 0;
-  _fontSize = 0;
-  _atlasDirty = false;
   _forceRender = false;
   _rendererBuffer = null;
   _clearColour = "#000000";
-  constructor(canvas, atlas, cols, rows) {
+  constructor(canvas, atlas, metrics) {
     this._canvas = canvas;
     this._ctx = canvas.getContext("2d");
     this._atlas = atlas;
-    this._cols = cols;
-    this._rows = rows;
   }
-  resize() {
-    this._dpr = window.devicePixelRatio || 1;
-    const cellFromHeight = Math.floor(window.innerHeight / this._rows);
-    const cellFromWidth = Math.floor(window.innerWidth / this._cols / CHAR_ASPECT);
-    this._cellH = Math.min(cellFromHeight, cellFromWidth);
-    this._cellW = Math.floor(this._cellH * CHAR_ASPECT);
-    this._viewW = this._cellW * this._cols;
-    this._viewH = this._cellH * this._rows;
-    this._fontSize = this._cellH;
+  configure(metrics) {
+    this._rows = metrics.rows;
+    this._cols = metrics.cols;
+    this._cellW = metrics.cellWidth;
+    this._cellH = metrics.cellHeight;
+    this._viewW = metrics.rendererWidth;
+    this._viewH = metrics.rendererHeight;
+    this._dpr = metrics.dpr;
     this._canvas.width = this._viewW * this._dpr;
     this._canvas.height = this._viewH * this._dpr;
     this._canvas.style.width = this._viewW + "px";
     this._canvas.style.height = this._viewH + "px";
     this._ctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
     this._forceRender = true;
-    this._atlasDirty = true;
   }
   renderGlyphAtXY(char_attr, x, y) {
     const entry = this._atlas.get(char_attr);
@@ -161,6 +161,9 @@ class Renderer {
     const scaledW = this._cellW * this._dpr;
     const scaledH = this._cellH * this._dpr;
     this._ctx.drawImage(sheet.canvas, entry.x, entry.y, scaledW, scaledH, x, y, this._cellW, this._cellH);
+  }
+  forceRender() {
+    this._forceRender = true;
   }
   get width() {
     return this._canvas.width;
@@ -195,6 +198,11 @@ class Renderer {
     this._forceRender = true;
   }
   renderFromBuffer(buffer, force = false) {
+    if (this._rows == 0 || this._cols == 0) {
+      this._ctx.fillStyle = "darkred";
+      this._ctx.fillRect(0, 0, 1024, 1024);
+      return;
+    }
     if (force == false && buffer.dirty == false) {
       return;
     }
@@ -209,12 +217,6 @@ class Renderer {
   render() {
     if (this._cellW === 0 || this._cellH === 0) {
       return;
-    }
-    if (this._atlasDirty) {
-      this._atlasDirty = false;
-      this._atlas.clear();
-      this._atlas.configure(this._cellW, this._cellH, this._fontSize, this._dpr);
-      this._forceRender = true;
     }
     if (this._forceRender || this._rendererBuffer != null && this._rendererBuffer.dirty) {
       this._ctx.fillStyle = this._clearColour;
@@ -321,18 +323,18 @@ class Atlas {
       sheet.clear();
     }
   }
-  configure(cellW, cellH, fontSize, dpr) {
-    if (this._cellW === cellW && this._cellH === cellH && this._fontSize === fontSize && this._dpr === dpr) {
+  configure(metrics) {
+    if (this._cellW === metrics.cellWidth && this._cellH === metrics.cellHeight && this._dpr === metrics.dpr) {
       return;
     }
     this.clear();
-    this._cellW = cellW;
-    this._cellH = cellH;
-    this._fontSize = fontSize;
-    this._dpr = dpr;
-    const scaledFontSize = fontSize * dpr;
-    const scaledCellH = cellH * dpr;
-    const scaledCellW = cellW * dpr;
+    this._cellW = metrics.cellWidth;
+    this._cellH = metrics.cellHeight;
+    this._fontSize = metrics.cellHeight;
+    this._dpr = metrics.dpr;
+    const scaledFontSize = this._fontSize * this._dpr;
+    const scaledCellH = this._cellH * this._dpr;
+    const scaledCellW = this._cellW * this._dpr;
     this._tempContext.textbaseLine = "alphabetic";
     let adjustedFontSize = scaledFontSize;
     let maxAscent = 0, maxDescent = 0;
@@ -365,6 +367,7 @@ class Atlas {
     this._glyph_middle_x = this._glyph_grid * 1.5;
     this._glyph_middle_y = this._glyph_top + this._glyph_grid * (3 / 2);
     this._aspect_ratio = this._realCellH / this._realCellW;
+    console.log("** Atlas configure", this._cellW, this._cellH, this._dpr);
   }
   get(char_attr) {
     let entry = this._entries.get(char_attr);
@@ -712,15 +715,17 @@ class Bitmap32Utils {
   }
   static Set(dst, x, y, value) {
     if (x >= 0 && x < dst.cols && y >= 0 && y < dst.rows) {
-      dst.buffer[x + y * dst.cols] = value;
+      dst.buffer[x + y * dst.stride] = value;
     }
   }
   static Print(dst, x, y, text, attr) {
     if (!dst)
       return;
+    const stride = dst.stride;
     const cols = dst.cols;
     const rows = dst.rows;
     const buf = dst.buffer;
+    console.log(stride);
     if (y < 0 || y >= rows)
       return;
     const len = text.length;
@@ -730,7 +735,7 @@ class Bitmap32Utils {
       return;
     const textStart = left - x;
     const width = right - left;
-    let offset = left + y * cols;
+    let offset = left + y * stride;
     for (let i = textStart;i < textStart + width; i++) {
       buf[offset++] = text.charCodeAt(i) & 65535 | attr;
     }
@@ -738,6 +743,7 @@ class Bitmap32Utils {
   static HLine(dst, x, y, w, value) {
     if (!dst)
       return;
+    const stride = dst.stride;
     const cols = dst.cols;
     const rows = dst.rows;
     const buf = dst.buffer;
@@ -747,11 +753,12 @@ class Bitmap32Utils {
     const right = x + w > cols ? cols : x + w;
     if (left >= right)
       return;
-    buf.fill(value, left + y * cols, right + y * cols);
+    buf.fill(value, left + y * stride, right + y * stride);
   }
   static VLine(dst, x, y, h, value) {
     if (!dst)
       return;
+    const stride = dst.stride;
     const cols = dst.cols;
     const rows = dst.rows;
     const buf = dst.buffer;
@@ -761,15 +768,16 @@ class Bitmap32Utils {
     const bottom = y + h > rows ? rows : y + h;
     if (top >= bottom)
       return;
-    let offset = x + top * cols;
+    let offset = x + top * stride;
     for (let row = top;row < bottom; row++) {
       buf[offset] = value;
-      offset += cols;
+      offset += stride;
     }
   }
   static Fill(dst, x, y, w, h, value) {
     if (!dst)
       return;
+    const stride = dst.stride;
     const cols = dst.cols;
     const rows = dst.rows;
     const buf = dst.buffer;
@@ -780,10 +788,10 @@ class Bitmap32Utils {
     if (left >= right || top >= bottom)
       return;
     const width = right - left;
-    let offset = left + top * cols;
+    let offset = left + top * stride;
     for (let row = top;row < bottom; row++) {
       buf.fill(value, offset, offset + width);
-      offset += cols;
+      offset += stride;
     }
   }
   static Border(dst, x, y, w, h, glyphs) {
@@ -806,9 +814,11 @@ class Bitmap32Utils {
   static Blit(dst, src, dstX, dstY, srcX, srcY, w, h) {
     if (!dst || !src || dst == src)
       return;
+    const srcStride = src.stride;
     const srcCols = src.cols;
     const srcRows = src.rows;
     const srcBuf = src.buffer;
+    const dstStride = dst.stride;
     const dstCols = dst.cols;
     const dstRows = dst.rows;
     const dstBuf = dst.buffer;
@@ -848,20 +858,20 @@ class Bitmap32Utils {
       return;
     if (srcX + w > srcCols || srcY + h > srcRows)
       return;
-    let srcOffset = srcX + srcY * srcCols;
-    let dstOffset = dstX + dstY * dstCols;
+    let srcOffset = srcX + srcY * srcStride;
+    let dstOffset = dstX + dstY * dstStride;
     for (let row = 0;row < h; row++) {
       dstBuf.set(srcBuf.subarray(srcOffset, srcOffset + w), dstOffset);
-      srcOffset += srcCols;
-      dstOffset += dstCols;
+      srcOffset += srcStride;
+      dstOffset += dstStride;
     }
   }
   static CopyAlways(dst, left) {
     if (!dst || !left)
       return;
-    if (dst.length != left.length)
+    if (dst.maxSize != left.maxSize)
       return;
-    const len = dst.length;
+    const len = dst.maxSize;
     const dstBuf = dst.buffer;
     const leftBuf = left.buffer;
     dstBuf.set(leftBuf, 0);
@@ -869,9 +879,9 @@ class Bitmap32Utils {
   static CopyNewer(dst, left, right) {
     if (!dst || !left || !right)
       return;
-    if (left.length != right.length || dst.length != left.length)
+    if (left.maxSize != right.maxSize || dst.maxSize != left.maxSize)
       return;
-    const len = dst.length;
+    const len = dst.maxSize;
     const dstBuf = dst.buffer;
     const leftBuf = left.buffer;
     const rightBuf = right.buffer;
@@ -882,9 +892,9 @@ class Bitmap32Utils {
   static CopyMask(dst, left, right, mask) {
     if (!dst || !left || !right || !mask)
       return;
-    if (left.length != right.length || dst.length != mask.length || left.length != mask.length)
+    if (left.maxSize != right.maxSize || dst.maxSize != mask.maxSize || left.maxSize != mask.maxSize)
       return;
-    const len = dst.length;
+    const len = dst.maxSize;
     const dstBuf = dst.buffer;
     const leftBuf = left.buffer;
     const rightBuf = right.buffer;
@@ -897,17 +907,37 @@ class Bitmap32Utils {
 
 // src/buffer/bitmap.ts
 class Bitmap32 {
-  cols;
-  stride;
-  rows;
-  length;
+  _cols;
+  _stride;
+  _rows;
+  maxSize;
   buffer;
-  constructor(cols, rows) {
-    this.cols = Math.max(cols, 1);
-    this.rows = Math.max(rows, 1);
-    this.length = this.cols * this.rows;
-    this.stride = this.cols;
-    this.buffer = new Uint32Array(this.length);
+  constructor(cols, rows, stride) {
+    this._cols = Math.max(cols, 1);
+    this._rows = Math.max(rows, 1);
+    this._stride = stride;
+    this.maxSize = this._rows * this._stride;
+    this.buffer = new Uint32Array(this.maxSize);
+    console.log("New Bitmap32", this._cols, this._rows, this._stride);
+  }
+  get rows() {
+    return this._rows;
+  }
+  get cols() {
+    return this._cols;
+  }
+  set cols(cols) {
+    this._cols = cols;
+  }
+  get stride() {
+    return this._stride;
+  }
+  set stride(stride) {
+    const size = this._rows * stride;
+    if (size > this.maxSize) {
+      throw `Buffer to large! New: ${size}, Existing: ${this.maxSize} ${stride}`;
+    }
+    this._stride = stride;
   }
 }
 
@@ -917,9 +947,14 @@ class PlainBuffer {
   _generation = 0;
   _generationBits = 0;
   _dirtyGeneration = 255;
-  constructor(cols, rows) {
-    this._glyphs = new Bitmap32(cols, rows);
+  constructor(cols, maxCols, rows) {
+    this._glyphs = new Bitmap32(cols, rows, maxCols);
     this._glyphs.buffer.fill(0);
+  }
+  configure(metrics) {
+    if (this._glyphs.rows != metrics.rows || this._glyphs.cols != metrics.cols) {
+      this._glyphs.cols = Math.min(this._glyphs.stride, metrics.cols);
+    }
   }
   get generation() {
     return this._generation;
@@ -943,6 +978,9 @@ class PlainBuffer {
   }
   get rows() {
     return this._glyphs.rows;
+  }
+  get stride() {
+    return this._glyphs.stride;
   }
   clear(char_attr) {
     Bitmap32Utils.Clear(this._glyphs, char_attr & 16777215 | this._generationBits);
@@ -983,6 +1021,30 @@ class PlainBuffer {
   }
 }
 
+// src/metrics.ts
+var CHAR_ASPECT = 0.6;
+function calculateRendererMetrics(containerWidth, containerHeight, dpr, minCols, maxCols, rows) {
+  let cellHeight = Math.floor(containerHeight / rows);
+  let cellWidth = Math.floor(cellHeight * CHAR_ASPECT);
+  let cols = Math.floor(containerWidth / cellWidth);
+  if (cols < minCols) {
+    cols = minCols;
+    cellWidth = Math.floor(containerWidth / cols);
+    cellHeight = Math.floor(cellWidth / CHAR_ASPECT);
+  } else if (cols > maxCols) {
+    cols = maxCols;
+  }
+  return {
+    cols,
+    rows,
+    cellWidth,
+    cellHeight,
+    rendererWidth: cellWidth * cols,
+    rendererHeight: cellHeight * rows,
+    dpr
+  };
+}
+
 // src/unnamed.ts
 class Unnamed {
   _renderer;
@@ -991,43 +1053,115 @@ class Unnamed {
   _tickTimer = null;
   _resizeNeeded = false;
   _tempBuffer;
+  _minCols;
+  _maxCols;
+  _rows;
+  _metrics;
   constructor(config) {
     this.tick = this.tick.bind(this);
-    this.palette.set(0, 31, 14, 28);
-    this.palette.set(1, 23, 67, 75);
-    this.palette.set(2, 62, 33, 55);
-    this.palette.set(3, 112, 55, 127);
-    this.palette.set(4, 88, 69, 99);
-    this.palette.set(5, 157, 48, 59);
-    this.palette.set(6, 100, 125, 52);
-    this.palette.set(7, 52, 133, 157);
-    this.palette.set(8, 154, 99, 72);
-    this.palette.set(9, 140, 143, 174);
-    this.palette.set(10, 210, 100, 113);
-    this.palette.set(11, 126, 196, 193);
-    this.palette.set(12, 228, 148, 58);
-    this.palette.set(13, 192, 199, 65);
-    this.palette.set(14, 215, 155, 125);
-    this.palette.set(15, 245, 237, 186);
+    this.onresize = this.onresize.bind(this);
+    if (config.palette === undefined) {
+      this.palette.set(0, 31, 14, 28);
+      this.palette.set(1, 23, 67, 75);
+      this.palette.set(2, 62, 33, 55);
+      this.palette.set(3, 112, 55, 127);
+      this.palette.set(4, 88, 69, 99);
+      this.palette.set(5, 157, 48, 59);
+      this.palette.set(6, 100, 125, 52);
+      this.palette.set(7, 52, 133, 157);
+      this.palette.set(8, 154, 99, 72);
+      this.palette.set(9, 140, 143, 174);
+      this.palette.set(10, 210, 100, 113);
+      this.palette.set(11, 126, 196, 193);
+      this.palette.set(12, 228, 148, 58);
+      this.palette.set(13, 192, 199, 65);
+      this.palette.set(14, 215, 155, 125);
+      this.palette.set(15, 245, 237, 186);
+    } else {
+      this.palette.setFrom(config.palette);
+    }
+    this._rows = Math.max(20, config.rows || 40);
+    this._maxCols = Math.max(40, config.maxCols || 80);
+    this._minCols = Math.max(20, config.minCols || 20);
+    this._metrics = calculateRendererMetrics(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1, this._minCols, this._maxCols, this._rows);
+    console.log(this._metrics.cols, this._metrics.rows, this._metrics.rendererWidth, this._metrics.rendererHeight);
+    console.log("maxCols", this._maxCols);
+    this._tempBuffer = new PlainBuffer(this._metrics.cols, this._maxCols, this._metrics.rows);
     this._atlas = new Atlas(this._palette);
-    this._renderer = new Renderer(config.canvas, this._atlas, config.cols || 80, config.rows || 40);
-    this._tempBuffer = new PlainBuffer(this._renderer.cols, this._renderer.rows);
+    this._atlas.configure(this._metrics);
+    this._renderer = new Renderer(config.canvas, this._atlas, this._metrics);
     this._renderer.clearColour = this.palette.getHexColour(0);
     this._renderer.buffer = this._tempBuffer;
-    this._tempBuffer.print(0, 0, "Hello World!!", 4128768);
-    this._tempBuffer.print(2, 2, "\x00", 4128768);
-    this._tempBuffer.print(2, 4, "Vert:\x00\x01\x00\x02\x00\x03", 4128768);
-    this._tempBuffer.print(2, 5, "Horz:\x00\x04\x00\x05\x00\x06", 4128768);
-    this._tempBuffer.print(2, 6, "Bloc:\x00\x07\x00\b", 4128768);
-    this._tempBuffer.print(2, 7, `Text:\x00	\x00
+    this.testPattern();
+    this._tickTimer = setInterval(this.tick, 30);
+    window.addEventListener("resize", this.onresize);
+    this._resizeNeeded = true;
+  }
+  get palette() {
+    return this._palette;
+  }
+  get atlas() {
+    return this._atlas;
+  }
+  get renderer() {
+    return this._renderer;
+  }
+  get cols() {
+    return this._metrics.cols;
+  }
+  get rows() {
+    return this._metrics.rows;
+  }
+  onresize() {
+    let newMetrics = calculateRendererMetrics(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1, this._minCols, this._maxCols, this._rows);
+    if (this._metrics === undefined || newMetrics.cols != this._metrics.cols || newMetrics.rows != this._metrics.rows || newMetrics.cellWidth != this._metrics.cellWidth || newMetrics.cellHeight != this._metrics.cellHeight || newMetrics.rendererWidth != this._metrics.rendererWidth || newMetrics.rendererHeight != this._metrics.rendererHeight) {
+      this._metrics = newMetrics;
+      this._resizeNeeded = true;
+      console.log(this._metrics.cols, this._metrics.rows, this._metrics.rendererWidth, this._metrics.rendererHeight);
+    }
+  }
+  tick() {
+    if (this._resizeNeeded) {
+      this._resizeNeeded = false;
+      this._tempBuffer.configure(this._metrics);
+      this._atlas.configure(this._metrics);
+      this._renderer.configure(this._metrics);
+      this.testPattern();
+      this._renderer.forceRender();
+    }
+    this._renderer.render();
+  }
+  testPattern() {
+    this._tempBuffer.clear(0);
+    let i = 1;
+    this._tempBuffer.print(0, 0, ">", 4128768);
+    this._tempBuffer.print(0, 1, ">", 4128768);
+    for (;i < this.cols - 1; i++) {
+      let num = i.toString();
+      if (num.length > 1) {
+        this._tempBuffer.print(i, 0, num[0], 4128768);
+        this._tempBuffer.print(i, 1, num[1], 4128768);
+      } else {
+        this._tempBuffer.print(i, 0, "0", 4128768);
+        this._tempBuffer.print(i, 1, num[0], 4128768);
+      }
+    }
+    this._tempBuffer.print(i, 0, "<", 4128768);
+    this._tempBuffer.print(i, 1, "<", 4128768);
+    this._tempBuffer.print(0, 3, "Hello World!!", 4128768);
+    this._tempBuffer.print(2, 4, "\x00", 4128768);
+    this._tempBuffer.print(2, 5, "Vert:\x00\x01\x00\x02\x00\x03", 4128768);
+    this._tempBuffer.print(2, 6, "Horz:\x00\x04\x00\x05\x00\x06", 4128768);
+    this._tempBuffer.print(2, 7, "Bloc:\x00\x07\x00\b", 4128768);
+    this._tempBuffer.print(2, 8, `Text:\x00	\x00
 `, 4128768);
-    this._tempBuffer.print(2, 8, "Cor1:\x00\v\x00\f\x00\r\x00\x0E", 4128768);
-    this._tempBuffer.print(2, 9, "Cor2:\x00\x0F\x00\x10\x00\x11\x00\x12", 4128768);
-    this._tempBuffer.print(2, 10, "Cor3:\x00\x13\x00\x14\x00\x15\x00\x16", 4128768);
-    this._tempBuffer.print(2, 11, "Shad:\x00\x17\x00\x18\x00\x19", 4128768);
-    this._tempBuffer.print(2, 12, "Patn:\x00\x1A\x00\x1B", 4128768);
-    this._tempBuffer.print(2, 13, "Rsvd:\x00\x1C\x00\x1D\x00\x1E\x00\x1F", 4128768);
-    this._tempBuffer.print(8, 1, "[]MWgy#£!|", 4128768);
+    this._tempBuffer.print(2, 9, "Cor1:\x00\v\x00\f\x00\r\x00\x0E", 4128768);
+    this._tempBuffer.print(2, 10, "Cor2:\x00\x0F\x00\x10\x00\x11\x00\x12", 4128768);
+    this._tempBuffer.print(2, 11, "Cor3:\x00\x13\x00\x14\x00\x15\x00\x16", 4128768);
+    this._tempBuffer.print(2, 12, "Shad:\x00\x17\x00\x18\x00\x19", 4128768);
+    this._tempBuffer.print(2, 13, "Patn:\x00\x1A\x00\x1B", 4128768);
+    this._tempBuffer.print(2, 14, "Rsvd:\x00\x1C\x00\x1D\x00\x1E\x00\x1F", 4128768);
+    this._tempBuffer.print(15, 3, "[]MWgy#£!|", 4128768);
     this._tempBuffer.border(9, 14, 30, 10, [
       19 | 983040,
       6 | 983040,
@@ -1050,34 +1184,12 @@ class Unnamed {
       23 | 983040,
       24 | 983040
     ]);
-    window.addEventListener("resize", () => {
-      this._resizeNeeded = true;
-    });
-    this._tickTimer = setInterval(this.tick, 30);
-    this._resizeNeeded = true;
-  }
-  get palette() {
-    return this._palette;
-  }
-  get atlas() {
-    return this._atlas;
-  }
-  get renderer() {
-    return this._renderer;
-  }
-  tick() {
-    if (this._resizeNeeded) {
-      this._resizeNeeded = false;
-      this._renderer.dirty = true;
-      this._renderer.resize();
-    }
-    this._renderer.render();
   }
 }
 
 // demo.ts
 var un = new Unnamed({
   canvas: document.getElementById("xcanvas"),
-  cols: 80,
+  maxCols: 80,
   rows: 40
 });

@@ -2,6 +2,7 @@ import { Atlas } from "./../atlas/atlas.ts";
 import { AtlasSheet } from "./../atlas/atlas-sheet.ts";
 import { PlainBuffer } from "../buffer/plain-buffer.ts";
 import {RendererUtils} from "./renderer-utils.ts";
+import type {RendererMetrics} from "../metrics.ts";
 
 const CHAR_ASPECT = 0.6;
 
@@ -9,40 +10,31 @@ export class Renderer {
     private _canvas: HTMLCanvasElement;
     private _ctx: CanvasRenderingContext2D;
     private _atlas:Atlas;
-    private _cols:number;
-    private _rows:number;
+    private _cols:number = 0;
+    private _rows:number = 0;
     private _dpr:number = 1;
     private _cellW:number = 0;
     private _cellH:number = 0;
     private _viewW:number = 0;
     private _viewH:number = 0;
-    private _fontSize:number = 0;
-    private _atlasDirty:boolean = false;
     private _forceRender:boolean = false;
     private _rendererBuffer:PlainBuffer|null = null;
     private _clearColour:string = '#000000'
 
-    constructor(canvas:HTMLCanvasElement, atlas:Atlas,cols:number, rows:number) {
+    constructor(canvas:HTMLCanvasElement, atlas:Atlas, metrics:RendererMetrics) {
         this._canvas = canvas;
         this._ctx = canvas.getContext("2d")!;
         this._atlas = atlas;
-        this._cols = cols;
-        this._rows = rows;
     }
 
-    resize():void {
-        this._dpr = window.devicePixelRatio || 1;
-
-        const cellFromHeight = Math.floor(window.innerHeight / this._rows);
-        const cellFromWidth = Math.floor(window.innerWidth / this._cols / CHAR_ASPECT);
-        this._cellH = Math.min(cellFromHeight, cellFromWidth);
-
-
-        //this._cellH = Math.floor(window.innerHeight / this._rows);
-        this._cellW = Math.floor(this._cellH * CHAR_ASPECT);
-        this._viewW = this._cellW * this._cols;
-        this._viewH = this._cellH * this._rows;
-        this._fontSize = this._cellH;
+    configure(metrics:RendererMetrics):void {
+        this._rows = metrics.rows;
+        this._cols = metrics.cols;
+        this._cellW = metrics.cellWidth;
+        this._cellH = metrics.cellHeight;
+        this._viewW = metrics.rendererWidth;
+        this._viewH = metrics.rendererHeight;
+        this._dpr = metrics.dpr;
 
         this._canvas.width = this._viewW * this._dpr;
         this._canvas.height = this._viewH * this._dpr;
@@ -51,7 +43,6 @@ export class Renderer {
 
         this._ctx.setTransform(this._dpr, 0,0, this._dpr, 0,0);
         this._forceRender = true;
-        this._atlasDirty = true;
     }
 
     renderGlyphAtXY(char_attr:number, x:number, y:number) {
@@ -67,6 +58,10 @@ export class Renderer {
             entry.x, entry.y, scaledW , scaledH,
             x, y, this._cellW, this._cellH
         );
+    }
+
+    forceRender() {
+        this._forceRender = true;
     }
 
     get width():number {
@@ -113,6 +108,12 @@ export class Renderer {
 
     renderFromBuffer(buffer:PlainBuffer, force:boolean = false) {
 
+        if (this._rows == 0 || this._cols == 0) {
+            this._ctx.fillStyle = 'darkred';
+            this._ctx.fillRect(0, 0, 1024, 1024);
+            return;
+        }
+
         if (force == false && buffer.dirty == false) {
             return;
         }
@@ -133,13 +134,6 @@ export class Renderer {
 
         if (this._cellW === 0 || this._cellH === 0) {
             return;
-        }
-
-        if (this._atlasDirty) {
-            this._atlasDirty = false;
-            this._atlas.clear();
-            this._atlas.configure(this._cellW, this._cellH, this._fontSize, this._dpr);
-            this._forceRender = true;
         }
 
         if (this._forceRender || (this._rendererBuffer != null && this._rendererBuffer.dirty)) {

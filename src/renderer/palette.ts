@@ -30,6 +30,19 @@ export class Palette {
         this._hexColours[idx] = colourToHex(col);
     }
 
+    setFrom(palette:Array<Colour>) {
+        const lim = Math.min(16, palette.length);
+        for(let i=0;i < lim;i++) {
+            const col = palette[i];
+            if (col === undefined) {
+                this.set(i, 0,0,0);
+            }
+            else {
+                this.set(i, col.r, col.g, col.b)
+            }
+        }
+    }
+
     getHexColourChecked(idx:number):string {
         return this._hexColours[idx]!;
     }
@@ -45,5 +58,7 @@ export class Palette {
             throw `Out of bounds ${idx}`;
         return this._colours[idx]!;
     }
+
+
 
 }

@@ -1,6 +1,7 @@
 import { Bitmap32Utils } from "./bitmap-utils.ts";
 import { BitMap8, Bitmap32 } from "./bitmap.ts";
 import { type IBuffer } from "./buffer.ts";
+import type {RendererMetrics} from "../metrics.ts";
 
 export class PlainBuffer implements IBuffer {
 
@@ -9,10 +10,19 @@ export class PlainBuffer implements IBuffer {
     private _generationBits:number = 0;
     private _dirtyGeneration:number = 0xFF;
 
-    constructor(cols: number, rows: number) {
-        this._glyphs = new Bitmap32(cols, rows)
+    constructor(cols: number, maxCols: number, rows: number) {
+        this._glyphs = new Bitmap32(cols, rows, maxCols);
         this._glyphs.buffer.fill(0);
     }
+
+    configure(metrics:RendererMetrics) {
+        if (this._glyphs.rows != metrics.rows ||
+            this._glyphs.cols != metrics.cols)
+        {
+            this._glyphs.cols = Math.min(this._glyphs.stride, metrics.cols);
+        }
+    }
+
     get generation() {
         return this._generation;
     }
@@ -35,6 +45,9 @@ export class PlainBuffer implements IBuffer {
     }
     get rows(): number {
         return this._glyphs.rows;
+    }
+    get stride(): number {
+        return this._glyphs.stride;
     }
     clear(char_attr: number): void {
         Bitmap32Utils.Clear(this._glyphs, (char_attr & 0x00FFFFFF) | this._generationBits);

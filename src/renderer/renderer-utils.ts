@@ -14,11 +14,7 @@ export class RendererUtils {
             return;
         }
 
-        if (renderer.cols * renderer.rows != buffer.glyphs.length) {
-            return;
-        }
-
-        let x = 0, y = 0, idx = 0, stride = buffer.cols, rows = buffer.rows;
+        let x = 0, y = 0, idx = 0, tidx = 0, cols = 0, stride = buffer.stride, rows = buffer.rows;
         let srcSheetNum = -1;
         let srcSheet:HTMLCanvasElement;
         const buf = buffer.glyphs.buffer;
@@ -29,8 +25,9 @@ export class RendererUtils {
         const scaledH = cellH * renderer.dpr;
 
         while (rows--) {
-            stride = buffer.cols;
-            while (stride--) {
+            tidx = idx;
+            cols = buffer.cols;
+            while (cols--) {
                 const char_attr: number = buf[idx++]!;
                 if (char_attr !== 0) {
                     const entry = atlas.get(char_attr);
@@ -46,6 +43,7 @@ export class RendererUtils {
             }
             x = 0;
             y += cellH
+            idx = tidx + stride;
         }
 
     }
@@ -60,11 +58,7 @@ export class RendererUtils {
             return;
         }
 
-        if (renderer.cols * renderer.rows != buffer.glyphs.length) {
-            return;
-        }
-
-        let x = 0, y = 0, idx = 0, stride = buffer.cols, rows = buffer.rows;
+        let x = 0, y = 0, idx = 0, tidx = 0, cols = 0, stride = buffer.stride, rows = buffer.rows;
         let srcSheetNum = -1;
         let srcSheet:HTMLCanvasElement;
         const buf = buffer.glyphs.buffer;
@@ -76,13 +70,13 @@ export class RendererUtils {
         const scaledH = cellH * renderer.dpr;
 
         while (rows--) {
-            stride = buffer.cols;
-            while (stride--) {
+            tidx = idx;
+            cols = buffer.cols;
+            while (cols--) {
 
                 const char_attr: number = buf[idx++]!;
 
                 if ((char_attr & 0xFF000000) !== genBits) {
-                    idx++;
                     x += cellW;
                     continue;
                 }
@@ -101,6 +95,7 @@ export class RendererUtils {
             }
             x = 0;
             y += cellH
+            idx = tidx + stride;
         }
 
     }

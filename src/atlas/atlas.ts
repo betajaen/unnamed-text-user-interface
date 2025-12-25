@@ -1,6 +1,7 @@
 import { Palette } from "../renderer/palette.ts";
 import { AtlasSheet } from "./atlas-sheet.ts";
 import { type AtlasGlyph } from "./atlas-glyph.ts";
+import type {RendererMetrics} from "../metrics.ts";
 
 const FONT_FAMILY = '"Cascadia Code", Menlo, monospace';
 const ASCENT_GLYPHS = ['M', '[', '|'];
@@ -54,22 +55,24 @@ export class Atlas {
         }
     }
 
-    configure(cellW:number, cellH:number, fontSize:number, dpr:number):void {
+    configure(metrics:RendererMetrics):void { //cellW:number, cellH:number, fontSize:number, dpr:number):void {
 
-        if (this._cellW === cellW && this._cellH === cellH && this._fontSize === fontSize && this._dpr === dpr) {
+        if (this._cellW === metrics.cellWidth &&
+            this._cellH === metrics.cellHeight &&
+            this._dpr === metrics.dpr) {
             return;
         }
 
         this.clear();
 
-        this._cellW = cellW;
-        this._cellH = cellH;
-        this._fontSize = fontSize;
-        this._dpr = dpr;
+        this._cellW = metrics.cellWidth;
+        this._cellH = metrics.cellHeight;
+        this._fontSize = metrics.cellHeight;
+        this._dpr = metrics.dpr;
 
-        const scaledFontSize = fontSize * dpr;
-        const scaledCellH = cellH * dpr;
-        const scaledCellW = cellW * dpr;
+        const scaledFontSize = this._fontSize * this._dpr;
+        const scaledCellH = this._cellH * this._dpr;
+        const scaledCellW = this._cellW * this._dpr;
         this._tempContext.textbaseLine = 'alphabetic';
         let adjustedFontSize = scaledFontSize;
         let maxAscent = 0, maxDescent = 0;
@@ -109,6 +112,7 @@ export class Atlas {
         this._glyph_middle_y = this._glyph_top+ this._glyph_grid * (3/2);
         this._aspect_ratio = this._realCellH / this._realCellW;
 
+        console.log("** Atlas configure", this._cellW, this._cellH, this._dpr);
     }
 
     get(char_attr:number):AtlasGlyph {
