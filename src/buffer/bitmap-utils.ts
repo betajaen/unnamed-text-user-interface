@@ -1,5 +1,6 @@
-import type {Bitmap32} from "./bitmap.ts";
-import { TextTools } from "../text-tools.ts";
+import { Bitmap32 } from "./bitmap.ts";
+import { TextFlags, TextTools } from "../text-tools.ts";
+import { Array32 } from "./array32.ts";
 
 export class Bitmap32Utils {
 
@@ -14,11 +15,12 @@ export class Bitmap32Utils {
     }
 
     static Print(dst:Bitmap32, x: number, y:number, text: string, attr:number) {
-        if (TextTools.isLatin(text)) {
+        const textFlags = TextTools.getTextFlags(text);
+        if (textFlags <= TextFlags.LATIN_1) {
             Bitmap32Utils.PrintEncoded(dst, x, y, text, attr);
         }
         else {
-            Bitmap32Utils.PrintEncoded(dst, x, y, TextTools.encode(text), attr);
+            Bitmap32Utils.PrintArray(dst, x, y, TextTools.encode2(text), attr);
         }
     }
     static PrintEncoded(dst:Bitmap32, x: number, y:number, text: string, attr:number) {
@@ -49,6 +51,40 @@ export class Bitmap32Utils {
         }
     }
 
+    static PrintArray(dst:Bitmap32, x: number, y:number, array:Array32, attr:number|undefined) {
+        if (!dst)
+            return;
+
+        const stride = dst.stride;
+        const cols = dst.cols;
+        const rows = dst.rows;
+        const buf = dst.buffer;
+
+        if (y < 0 || y >= rows)
+            return;
+
+        const len = array.size;
+        const left = x < 0 ? 0 : x;
+        const right = x + len > cols ? cols : x + len;
+
+        if (left >= right)
+            return;
+
+        const textStart = left - x;
+        const width = right - left;
+        let offset = left + (y * stride);
+
+        if (attr === undefined) {
+            for (let i = textStart; i < textStart + width; i++) {
+                buf[offset++] = array.get(i)!;
+            }
+        }
+        else {
+            for (let i = textStart; i < textStart + width; i++) {
+                buf[offset++] = (array.get(i)!) | attr;
+            }
+        }
+    }
     static HLine(dst:Bitmap32, x: number, y:number, w:number, value: number) {
         if (!dst)
             return;

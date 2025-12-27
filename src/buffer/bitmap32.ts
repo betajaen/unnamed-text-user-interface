@@ -43,17 +43,3 @@ export class Bitmap32 {
     }
 
 }
-
-export class BitMap8 {
-    readonly cols: number;
-    readonly rows: number;
-    readonly size: number;
-    readonly buffer: Uint8Array;
-
-    constructor(cols:number, rows:number) {
-        this.cols = Math.max(cols, 1);
-        this.rows = Math.max(rows, 1);
-        this.size = this.cols * this.rows;
-        this.buffer = new Uint8Array(this.size);
-    }
-}

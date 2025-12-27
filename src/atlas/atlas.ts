@@ -5,8 +5,8 @@ import type {RendererMetrics} from "../metrics.ts";
 import {TextTools} from "../text-tools.ts";
 
 const FONT_FAMILY = '"Cascadia Code", Menlo, monospace';
-const ASCENT_GLYPHS = ['M', '[', '|'];
-const DESCENT_GLYPHS = ['g', 'M', '|'];
+const ASCENT_GLYPHS = ["|","É","q","Å"]; //['M', '[', '|'];
+const DESCENT_GLYPHS = ["|","É","q","Å"];
 
 export class Atlas {
     private _palette:Palette;

@@ -4,8 +4,6 @@ import { PlainBuffer } from "../buffer/plain-buffer.ts";
 import {RendererUtils} from "./renderer-utils.ts";
 import type {RendererMetrics} from "../metrics.ts";
 
-const CHAR_ASPECT = 0.6;
-
 export class Renderer {
     private _canvas: HTMLCanvasElement;
     private _ctx: CanvasRenderingContext2D;

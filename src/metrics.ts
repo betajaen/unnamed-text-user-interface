@@ -1,5 +1,5 @@
 
-const CHAR_ASPECT = 0.6;
+const CHAR_ASPECT = 0.5;
 
 export type RendererMetrics = {
     cols: number;

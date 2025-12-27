@@ -1,5 +1,5 @@
 import { Bitmap32Utils } from "./bitmap-utils.ts";
-import { BitMap8, Bitmap32 } from "./bitmap.ts";
+import { Bitmap32 } from "./bitmap32.ts";
 import { type IBuffer } from "./buffer.ts";
 import type {RendererMetrics} from "../metrics.ts";
 

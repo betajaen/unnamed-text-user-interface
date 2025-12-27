@@ -215,7 +215,7 @@ export class Unnamed {
             // CJK (segmenter, dictionary - above 0x7FFF)
             "你好世界",
             // Arabic (segmenter, direct - 0x0600-0x06FF range)
-            "مرحبا",
+         "LTR text into : " + "هلا   مصر العراق سوريا  هلونك" + " Then back into LTR. " + "    ه  ",
             // Emoji - single (segmenter, dictionary - surrogate pair)
             "Hello 🎉 World",
             // Emoji with skin tone modifier (segmenter, dictionary - multi-codepoint grapheme)
@@ -238,7 +238,7 @@ export class Unnamed {
         }
 
         for(i=0;i < textStrings.length;i++) {
-            this._tempBuffer.print(16, 4+i, textStrings[i]!,( (i +2) << 4 | 0xF) << 16);
+            this._tempBuffer.print(2, 4+i, textStrings[i]!,( (i +2) << 4 | 0xF) << 16);
         }
 
         this._tempBuffer.border(9, 18, 30, 10,

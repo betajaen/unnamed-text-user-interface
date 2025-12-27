@@ -23,7 +23,7 @@
       display: block;
     }
     div#xstatus {
-      height: 1em;
+      height: 0.25em;
       width: 1em;
       display: block;
       z-index: 999;
@@ -44,18 +44,13 @@
     function connect() {
       if (ws !== null && ws.readyState !== 0)
         return;
-
       setTimeout(connect, 250);
-
       console.log("Attempting to connect....", "ws://" + location.host + "/__dev");
-
       ws = new WebSocket("ws://" + location.host + "/__dev");
-
       ws.onopen = (e) => {
         ws.send("Hello from " + navigator.userAgent);
         console.log("connected", JSON.parse(JSON.stringify(e)));
          document.getElementById("xstatus").style.backgroundColor = 'pink';
-
       }
       ws.onmessage = (e) => {
         document.getElementById("xstatus").style.backgroundColor = 'yellow';
@@ -66,7 +61,6 @@
       ws.onerror = (e) => {
         console.log(e);
         document.getElementById("xstatus").style.backgroundColor = 'red';
-
         ws = null;
       }
       ws.onclose = (e) => {
@@ -74,12 +68,9 @@
         document.getElementById("xstatus").style.backgroundColor = 'blue';
         ws = null;
       }
-
     }
-
     window.addEventListener('load', () => {
       setTimeout(connect, 500);
-
         setTimeout(() => {
         console.log("500");
       }, 500);
