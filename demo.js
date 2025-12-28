@@ -1791,6 +1791,7 @@ class Atlas {
 
 // src/buffer/bitmap-utils.ts
 class Bitmap32Utils {
+  static _temp = new Uint32Array(512);
   static Clear(dst, value) {
     dst.buffer.fill(value & 4294967295);
   }
@@ -1931,7 +1932,7 @@ class Bitmap32Utils {
       }
     }
   }
-  static Fill(dst, x, y, w, h, value) {
+  static Fill(dst, x, y, w, h, value, pattern) {
     if (!dst)
       return;
     const stride = dst.stride;
@@ -1944,11 +1945,45 @@ class Bitmap32Utils {
     const bottom = y + h > rows ? rows : y + h;
     if (left >= right || top >= bottom)
       return;
+    pattern = (pattern & 4294967295) >>> 0;
     const width = right - left;
     let offset = left + top * stride;
-    for (let row = top;row < bottom; row++) {
-      buf.fill(value, offset, offset + width);
-      offset += stride;
+    if (pattern === 4294967295) {
+      for (let row = top;row < bottom; row++) {
+        buf.fill(value, offset, offset + width);
+        offset += stride;
+      }
+    } else {
+      let bg = 15728640 & value;
+      let fg = 983040 & value;
+      let off_value = bg >> 4 | fg << 4 | value & 4278255615;
+      const tmp = Bitmap32Utils._temp;
+      let p_even = pattern & 65535;
+      let p_odd = pattern >> 16 & 65535;
+      for (let i = 0;i < width; i++) {
+        if (p_even & 1) {
+          tmp[i] = value;
+        } else {
+          tmp[i] = off_value;
+        }
+        p_even = ((p_even >>> 1 | p_even << 15) & 65535) >>> 0;
+        if (p_odd & 1) {
+          tmp[i + width] = value;
+        } else {
+          tmp[i + width] = off_value;
+        }
+        p_odd = ((p_odd >>> 1 | p_odd << 15) & 65535) >>> 0;
+      }
+      const tmp_even = tmp.subarray(0, width);
+      const tmp_odd = tmp.subarray(width, width + width);
+      for (let row = top;row < bottom; row++) {
+        if (row & 1) {
+          buf.set(tmp_even, offset);
+        } else {
+          buf.set(tmp_odd, offset);
+        }
+        offset += stride;
+      }
     }
   }
   static Border(dst, x, y, w, h, glyphs) {
@@ -2163,8 +2198,8 @@ class PlainBuffer {
     Bitmap32Utils.VLine(this._glyphs, x, y, h, char_attr & 16777215 | this._generationBits, pattern || 4294967295);
     this._dirtyGeneration = this._generation;
   }
-  fill(x, y, w, h, char_attr) {
-    Bitmap32Utils.Fill(this._glyphs, x, y, w, h, char_attr & 16777215 | this._generationBits);
+  fill(x, y, w, h, char_attr, pattern) {
+    Bitmap32Utils.Fill(this._glyphs, x, y, w, h, char_attr & 16777215 | this._generationBits, pattern || 4294967295);
     this._dirtyGeneration = this._generation;
   }
   print(x, y, text, char_attr) {
@@ -2443,3 +2478,4 @@ buf.hline(0, 1, 5, 917527);
 buf.print(0, 1, "012345678901234567890123456789012345678901234567890", 983040);
 buf.hline(0, 5, 45, 9437210, 2863289685);
 buf.vline(3, 6, 17, 9437210, 2863289685);
+buf.fill(7, 7, 20, 6, 9437210, 2863289685);

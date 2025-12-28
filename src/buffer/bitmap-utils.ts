@@ -1,4 +1,4 @@
-import { Bitmap32 } from "./bitmap.ts";
+import { type Bitmap32 } from "./bitmap.ts";
 import { TextFlags, TextTools } from "../text-tools.ts";
 import { Array32 } from "./array32.ts";
 
@@ -7,6 +7,8 @@ function ror(value: number, shift: number): number {
 }
 
 export class Bitmap32Utils {
+
+    static _temp:Uint32Array = new Uint32Array(512);
 
     static Clear(dst:Bitmap32, value:number) {
         dst.buffer.fill(value & 0xFFFFFFFF);
@@ -190,7 +192,7 @@ export class Bitmap32Utils {
         }
     }
 
-    static Fill(dst:Bitmap32, x: number, y:number, w:number, h:number, value: number) {
+    static Fill(dst:Bitmap32, x: number, y:number, w:number, h:number, value: number, pattern: number) {
         if (!dst)
             return;
 
@@ -207,11 +209,55 @@ export class Bitmap32Utils {
         if (left >= right || top >= bottom)
             return;
 
+        pattern = (pattern & 0xFFFF_FFFF) >>> 0;
+
         const width = right - left;
         let offset = left + (top * stride);
-        for(let row = top; row < bottom; row++) {
-            buf.fill(value, offset, offset + width);
-            offset += stride;
+
+        if (pattern === 0xFFFF_FFFF) {
+            for (let row = top; row < bottom; row++) {
+                buf.fill(value, offset, offset + width);
+                offset += stride;
+            }
+        }
+        else {
+            let bg = (0x00F0_0000 & value);
+            let fg = (0x000F_0000 & value);
+            let off_value = ( (bg >> 4) | (fg << 4) ) | (value & 0xFF00_FFFF);
+
+            const tmp = Bitmap32Utils._temp;
+            let p_even = pattern & 0xFFFF;
+            let p_odd = (pattern >> 16) & 0xFFFF;
+
+            for(let i=0;i < width;i++) {
+                if (p_even & 1) {
+                    tmp[i] = value;
+                }
+                else {
+                    tmp[i] = off_value;
+                }
+                p_even = (((p_even >>> 1) | (p_even << 15)) & 0xFFFF) >>> 0;
+                if (p_odd & 1) {
+                    tmp[i+width] = value;
+                }
+                else {
+                    tmp[i+width] = off_value;
+                }
+                p_odd = (((p_odd >>> 1) | (p_odd << 15)) & 0xFFFF) >>> 0;
+            }
+
+            const tmp_even = tmp.subarray(0, width);
+            const tmp_odd = tmp.subarray(width, width+width);
+
+            for (let row = top; row < bottom; row++) {
+                if (row & 1) {
+                    buf.set(tmp_even, offset);
+                }
+                else {
+                    buf.set(tmp_odd, offset);
+                }
+                offset += stride;
+            }
         }
     }
 
