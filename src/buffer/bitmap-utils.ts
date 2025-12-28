@@ -118,6 +118,8 @@ export class Bitmap32Utils {
         if (left >= right)
             return;
 
+        pattern = (pattern & 0xFFFF_FFFF) >>> 0;
+
         if (pattern == 0xFFFF_FFFF) {
             buf.fill(value, left + (y * stride), right + (y * stride));
         }
@@ -126,7 +128,7 @@ export class Bitmap32Utils {
             let fg = (0x000F_0000 & value);
             let off_value = ( (bg >> 4) | (fg << 4) ) | (value & 0xFF00_FFFF);
             let off = left + (y * stride);
-            let p = (pattern & 0xFFFF_FFFF) >>> 0;
+            let p = pattern;
 
             for(let i=left;i < right;i++) {
                 if (p & 1) {
@@ -141,7 +143,7 @@ export class Bitmap32Utils {
         }
     }
 
-    static VLine(dst:Bitmap32, x: number, y:number, h:number, value: number) {
+    static VLine(dst:Bitmap32, x: number, y:number, h:number, value: number, pattern: number) {
         if (!dst)
             return;
 
@@ -159,10 +161,32 @@ export class Bitmap32Utils {
         if (top >= bottom)
             return;
 
-        let offset = x + (top * stride);
-        for(let row = top; row < bottom; row++) {
-            buf[offset] = value;
-            offset += stride;
+        pattern = (pattern & 0xFFFF_FFFF) >>> 0;
+
+        if (pattern === 0xFFFF_FFFF) {
+            let offset = x + (top * stride);
+            for (let row = top; row < bottom; row++) {
+                buf[offset] = value;
+                offset += stride;
+            }
+        }
+        else {
+            let bg = (0x00F0_0000 & value);
+            let fg = (0x000F_0000 & value);
+            let off_value = ( (bg >> 4) | (fg << 4) ) | (value & 0xFF00_FFFF);
+            let p = pattern;
+
+            let offset = x + (top * stride);
+            for (let row = top; row < bottom; row++) {
+                if (p & 1) {
+                    buf[offset] = value;
+                }
+                else {
+                    buf[offset] = off_value;
+                }
+                p = ( (p >>> 1) | (p << 31) ) >>> 0;
+                offset += stride;
+            }
         }
     }
 

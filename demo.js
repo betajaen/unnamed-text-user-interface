@@ -1874,6 +1874,7 @@ class Bitmap32Utils {
     const right = x + w > cols ? cols : x + w;
     if (left >= right)
       return;
+    pattern = (pattern & 4294967295) >>> 0;
     if (pattern == 4294967295) {
       buf.fill(value, left + y * stride, right + y * stride);
     } else {
@@ -1881,7 +1882,7 @@ class Bitmap32Utils {
       let fg = 983040 & value;
       let off_value = bg >> 4 | fg << 4 | value & 4278255615;
       let off = left + y * stride;
-      let p = (pattern & 4294967295) >>> 0;
+      let p = pattern;
       for (let i = left;i < right; i++) {
         if (p & 1) {
           buf[off] = value;
@@ -1893,7 +1894,7 @@ class Bitmap32Utils {
       }
     }
   }
-  static VLine(dst, x, y, h, value) {
+  static VLine(dst, x, y, h, value, pattern) {
     if (!dst)
       return;
     const stride = dst.stride;
@@ -1906,10 +1907,28 @@ class Bitmap32Utils {
     const bottom = y + h > rows ? rows : y + h;
     if (top >= bottom)
       return;
-    let offset = x + top * stride;
-    for (let row = top;row < bottom; row++) {
-      buf[offset] = value;
-      offset += stride;
+    pattern = (pattern & 4294967295) >>> 0;
+    if (pattern === 4294967295) {
+      let offset = x + top * stride;
+      for (let row = top;row < bottom; row++) {
+        buf[offset] = value;
+        offset += stride;
+      }
+    } else {
+      let bg = 15728640 & value;
+      let fg = 983040 & value;
+      let off_value = bg >> 4 | fg << 4 | value & 4278255615;
+      let p = pattern;
+      let offset = x + top * stride;
+      for (let row = top;row < bottom; row++) {
+        if (p & 1) {
+          buf[offset] = value;
+        } else {
+          buf[offset] = off_value;
+        }
+        p = (p >>> 1 | p << 31) >>> 0;
+        offset += stride;
+      }
     }
   }
   static Fill(dst, x, y, w, h, value) {
@@ -2140,8 +2159,8 @@ class PlainBuffer {
     Bitmap32Utils.HLine(this._glyphs, x, y, w, char_attr & 16777215 | this._generationBits, pattern || 4294967295);
     this._dirtyGeneration = this._generation;
   }
-  vline(x, y, h, char_attr) {
-    Bitmap32Utils.VLine(this._glyphs, x, y, h, char_attr & 16777215 | this._generationBits);
+  vline(x, y, h, char_attr, pattern) {
+    Bitmap32Utils.VLine(this._glyphs, x, y, h, char_attr & 16777215 | this._generationBits, pattern || 4294967295);
     this._dirtyGeneration = this._generation;
   }
   fill(x, y, w, h, char_attr) {
@@ -2423,3 +2442,4 @@ buf.print(0, 0, "Hello", 983040);
 buf.hline(0, 1, 5, 917527);
 buf.print(0, 1, "012345678901234567890123456789012345678901234567890", 983040);
 buf.hline(0, 5, 45, 9437210, 2863289685);
+buf.vline(3, 6, 17, 9437210, 2863289685);
