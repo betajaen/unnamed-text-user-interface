@@ -4,6 +4,8 @@ import { Atlas } from "./atlas/atlas.ts";
 
 import {PlainBuffer} from "./buffer/plain-buffer.ts";
 import {type RendererMetrics, calculateRendererMetrics } from "./metrics.ts";
+import {type IBuffer} from "./buffer/buffer.ts";
+import mitt, { Emitter } from "mitt";
 
 export const DefaultPalette = [
     '#1f0e1c',  // 0  - Near black (dark purple)
@@ -32,17 +34,29 @@ export type UnnamedConfig = {
     palette?: Array<Colour>;
 }
 
+type ResizeEvent = {
+    cols: number;
+    rows: number;
+}
+
+type UnnamedEvents = {
+    resize: ResizeEvent;
+    render: number;
+    error: Error;
+}
+
 export class Unnamed {
     private _renderer:Renderer;
     private _atlas:Atlas;
     private _palette = new Palette();
     private _tickTimer: ReturnType<typeof setInterval> | null = null;
     private _resizeNeeded: boolean = false;
-    private _tempBuffer:PlainBuffer;
+    private _buffer:PlainBuffer;
     private _minCols:number;
     private _maxCols:number;
     private _rows:number;
     private _metrics:RendererMetrics;
+    private _emitter:Emitter<UnnamedEvents> = mitt<UnnamedEvents>();
 
     constructor(config:UnnamedConfig) {
 
@@ -85,7 +99,7 @@ export class Unnamed {
         console.log(this._metrics.cols, this._metrics.rows, this._metrics.rendererWidth, this._metrics.rendererHeight)
         console.log("maxCols", this._maxCols);
 
-        this._tempBuffer = new PlainBuffer(this._metrics.cols, this._maxCols, this._metrics.rows);
+        this._buffer = new PlainBuffer(this._metrics.cols, this._maxCols, this._metrics.rows);
         this._atlas = new Atlas(this._palette);
         this._atlas.configure(this._metrics);
 
@@ -93,15 +107,21 @@ export class Unnamed {
             config.canvas, this._atlas, this._metrics
         );
         this._renderer.clearColour = this.palette.getHexColour(0);
-        this._renderer.buffer = this._tempBuffer;
+        this._renderer.buffer = this._buffer;
 
-        this.testPattern();
-
+        //this.testPattern();
 
         this._tickTimer = setInterval(this.tick, 30);
         window.addEventListener("resize", this.onresize);
         this._resizeNeeded = true;
+    }
 
+    get on() {
+        return this._emitter.on;
+    }
+
+    get off() {
+        return this._emitter.off;
     }
 
     get palette():Palette {
@@ -122,6 +142,10 @@ export class Unnamed {
 
     get rows():number {
         return this._metrics.rows;
+    }
+
+    get buffer():IBuffer {
+        return this._buffer;
     }
 
     onresize() {
@@ -152,39 +176,43 @@ export class Unnamed {
     tick() {
         if (this._resizeNeeded) {
             this._resizeNeeded = false;
-            this._tempBuffer.configure(this._metrics);
+            this._buffer.configure(this._metrics);
             this._atlas.configure(this._metrics);
             this._renderer.configure(this._metrics);
-            this.testPattern();
+            this._emitter.emit('resize', {cols: this.cols, rows: this.rows });
             this._renderer.forceRender();
         }
-        this._renderer.render();
+        if (this._renderer.willRender()) {
+            this._emitter.emit('render', this._buffer.generation);
+            this._renderer.render();
+            this._buffer.bumpGeneration();
+        }
     }
 
     testPattern() {
 
-        this._tempBuffer.clear(0);
+        this._buffer.clear(0);
         let i=1;
-        this._tempBuffer.print(0, 0, ">", 0x003F0000);
-        this._tempBuffer.print(0, 1, ">", 0x003F0000);
+        this._buffer.print(0, 0, ">", 0x003F0000);
+        this._buffer.print(0, 1, ">", 0x003F0000);
         for(;i < this.cols-1;i++) {
             let num = i.toString();
             if (num.length > 1) {
-                this._tempBuffer.print(i, 0, num[0]!, 0x003F0000);
-                this._tempBuffer.print(i, 1, num[1]!, 0x003F0000);
+                this._buffer.print(i, 0, num[0]!, 0x003F0000);
+                this._buffer.print(i, 1, num[1]!, 0x003F0000);
             }
             else{
-                this._tempBuffer.print(i, 0, "0", 0x003F0000);
-                this._tempBuffer.print(i, 1, num[0]!, 0x003F0000);
+                this._buffer.print(i, 0, "0", 0x003F0000);
+                this._buffer.print(i, 1, num[0]!, 0x003F0000);
             }
         }
-        this._tempBuffer.print(i, 0, "<", 0x003F0000);
-        this._tempBuffer.print(i, 1, "<", 0x003F0000);
-        this._tempBuffer.print(2,3, "[]MWgy#£!|", 0x003F0000);
+        this._buffer.print(i, 0, "<", 0x003F0000);
+        this._buffer.print(i, 1, "<", 0x003F0000);
+        this._buffer.print(2,3, "[]MWgy#£!|", 0x003F0000);
         i = 0;
         let k = 2, j = 5;
         for(;i < 32;i++) {
-            this._tempBuffer.print(k, j, String.fromCharCode(i), 0x003F0000);
+            this._buffer.print(k, j, String.fromCharCode(i), 0x003F0000);
             k+=2;
             if (k == 10) {
                 k = 2;
@@ -233,15 +261,15 @@ export class Unnamed {
         ];
 
         for(i=0;i < 16;i++) {
-            this._tempBuffer.print(15+i*3, 2, '   ', i << 20);
-            this._tempBuffer.print(15+i*3, 3, i.toString().padStart(3, ' ') , (i) << 16);
+            this._buffer.print(15+i*3, 2, '   ', i << 20);
+            this._buffer.print(15+i*3, 3, i.toString().padStart(3, ' ') , (i) << 16);
         }
 
         for(i=0;i < textStrings.length;i++) {
-            this._tempBuffer.print(2, 4+i, textStrings[i]!,( (i +2) << 4 | 0xF) << 16);
+            this._buffer.print(2, 4+i, textStrings[i]!,( (i +2) << 4 | 0xF) << 16);
         }
 
-        this._tempBuffer.border(9, 18, 30, 10,
+        this._buffer.border(9, 18, 30, 10,
             [
                 19 | 0x000F0000,
                 6 | 0x000F0000,
@@ -257,7 +285,7 @@ export class Unnamed {
             ])
 
 
-        this._tempBuffer.border(9, 28, 30, 10,
+        this._buffer.border(9, 28, 30, 10,
             [
                 19 | 0x000F0000,
                 6 | 0x000F0000,
@@ -272,7 +300,7 @@ export class Unnamed {
                 24 | 0x000F0000,
             ])
 
-        this._tempBuffer.border(40, 18, 30, 10,
+        this._buffer.border(40, 18, 30, 10,
             [
                 19 | 0x00080000,
                 6 | 0x00080000,
@@ -287,7 +315,7 @@ export class Unnamed {
                 24 | 0x00080000,
             ])
 
-        this._tempBuffer.border(40, 28, 30, 10,
+        this._buffer.border(40, 28, 30, 10,
             [
                 15 | 0x00050000,
                 5 | 0x00050000,

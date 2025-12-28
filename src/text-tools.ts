@@ -117,9 +117,10 @@ export class TextTools {
         return false;
     }
 
-    static encode2(str: string, into?: Array32, flags?: number): Array32 {
+    static EncodeArray32(str: string, into?: Array32, flags?: number, char_attr?:number): Array32 {
         let encoding: Array32 = into || TextTools._textArray;
         flags = flags || this.getTextFlags(str);
+        char_attr = char_attr || 0;
         encoding.reset(1);
 
         if ((flags & TextFlags.RTL) == 0) {
@@ -133,10 +134,10 @@ export class TextTools {
                     if (this.isGlyphSpace(cc)) {
                         cc = 0x20;
                     }
-                    encoding.push(cc);
+                    encoding.push(cc | char_attr);
                 } else {
                     const num = 0x8000 + TextTools.getOrAdd(glyph);
-                    encoding.push(num);
+                    encoding.push(num | char_attr);
                 }
             }
         } else {
@@ -153,10 +154,10 @@ export class TextTools {
                     if (this.isGlyphSpace(cc)) {
                         cc = 0x20;
                     }
-                    encoding.push(cc);
+                    encoding.push(cc | char_attr);
                 } else {
                     const num = 0x8000 + TextTools.getOrAdd(glyph);
-                    encoding.push(num);
+                    encoding.push(num | char_attr);
                 }
             }
 

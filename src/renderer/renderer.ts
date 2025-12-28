@@ -127,6 +127,18 @@ export class Renderer {
 
     }
 
+    willRender():boolean {
+
+        if (this._cellW === 0 || this._cellH === 0) {
+            return false;
+        }
+
+        if (this._forceRender || (this._rendererBuffer != null && this._rendererBuffer.dirty)) {
+            return true;
+        }
+
+        return false;
+    }
 
     render() {
 

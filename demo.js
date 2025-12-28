@@ -214,6 +214,15 @@ class Renderer {
       }
     }
   }
+  willRender() {
+    if (this._cellW === 0 || this._cellH === 0) {
+      return false;
+    }
+    if (this._forceRender || this._rendererBuffer != null && this._rendererBuffer.dirty) {
+      return true;
+    }
+    return false;
+  }
   render() {
     if (this._cellW === 0 || this._cellH === 0) {
       return;
@@ -1269,9 +1278,10 @@ class TextTools {
       return true;
     return false;
   }
-  static encode2(str, into, flags) {
+  static EncodeArray32(str, into, flags, char_attr) {
     let encoding = into || TextTools._textArray;
     flags = flags || this.getTextFlags(str);
+    char_attr = char_attr || 0;
     encoding.reset(1);
     if ((flags & 8 /* RTL */) == 0) {
       for (const segment of TextTools._graphemeSeg.segment(str)) {
@@ -1284,10 +1294,10 @@ class TextTools {
           if (this.isGlyphSpace(cc)) {
             cc = 32;
           }
-          encoding.push(cc);
+          encoding.push(cc | char_attr);
         } else {
           const num = 32768 + TextTools.getOrAdd(glyph);
-          encoding.push(num);
+          encoding.push(num | char_attr);
         }
       }
     } else {
@@ -1302,10 +1312,10 @@ class TextTools {
           if (this.isGlyphSpace(cc)) {
             cc = 32;
           }
-          encoding.push(cc);
+          encoding.push(cc | char_attr);
         } else {
           const num = 32768 + TextTools.getOrAdd(glyph);
-          encoding.push(num);
+          encoding.push(num | char_attr);
         }
       }
     }
@@ -1790,14 +1800,20 @@ class Bitmap32Utils {
     }
   }
   static Print(dst, x, y, text, attr) {
-    const textFlags = TextTools.getTextFlags(text);
-    if (textFlags <= 2 /* LATIN_1 */) {
-      Bitmap32Utils.PrintEncoded(dst, x, y, text, attr);
+    if (!dst)
+      return;
+    if (typeof text === "string") {
+      const textFlags = TextTools.getTextFlags(text);
+      if (textFlags <= 2 /* LATIN_1 */) {
+        Bitmap32Utils._PrintLatin1(dst, x, y, text, attr || 983040);
+      } else {
+        Bitmap32Utils._PrintArray(dst, x, y, TextTools.EncodeArray32(text, undefined, undefined, attr), undefined);
+      }
     } else {
-      Bitmap32Utils.PrintArray(dst, x, y, TextTools.encode2(text), attr);
+      Bitmap32Utils._PrintArray(dst, x, y, text, attr);
     }
   }
-  static PrintEncoded(dst, x, y, text, attr) {
+  static _PrintLatin1(dst, x, y, text, attr) {
     if (!dst)
       return;
     const stride = dst.stride;
@@ -1818,7 +1834,7 @@ class Bitmap32Utils {
       buf[offset++] = text.charCodeAt(i) & 65535 | attr;
     }
   }
-  static PrintArray(dst, x, y, array, attr) {
+  static _PrintArray(dst, x, y, array, attr) {
     if (!dst)
       return;
     const stride = dst.stride;
@@ -2087,6 +2103,14 @@ class PlainBuffer {
   get stride() {
     return this._glyphs.stride;
   }
+  bumpGeneration() {
+    this._dirtyGeneration = this._generation;
+    this._generation++;
+    if (this._generation >= 255) {
+      this._generation = 1;
+    }
+    this._generationBits = this._generation << 24;
+  }
   clear(char_attr) {
     Bitmap32Utils.Clear(this._glyphs, char_attr & 16777215 | this._generationBits);
     this._dirtyGeneration = this._generation;
@@ -2150,6 +2174,24 @@ function calculateRendererMetrics(containerWidth, containerHeight, dpr, minCols,
   };
 }
 
+// node_modules/mitt/dist/mitt.mjs
+function mitt_default(n) {
+  return { all: n = n || new Map, on: function(t, e) {
+    var i = n.get(t);
+    i ? i.push(e) : n.set(t, [e]);
+  }, off: function(t, e) {
+    var i = n.get(t);
+    i && (e ? i.splice(i.indexOf(e) >>> 0, 1) : n.set(t, []));
+  }, emit: function(t, e) {
+    var i = n.get(t);
+    i && i.slice().map(function(n2) {
+      n2(e);
+    }), (i = n.get("*")) && i.slice().map(function(n2) {
+      n2(t, e);
+    });
+  } };
+}
+
 // src/unnamed.ts
 class Unnamed {
   _renderer;
@@ -2157,11 +2199,12 @@ class Unnamed {
   _palette = new Palette;
   _tickTimer = null;
   _resizeNeeded = false;
-  _tempBuffer;
+  _buffer;
   _minCols;
   _maxCols;
   _rows;
   _metrics;
+  _emitter = mitt_default();
   constructor(config) {
     this.tick = this.tick.bind(this);
     this.onresize = this.onresize.bind(this);
@@ -2191,16 +2234,21 @@ class Unnamed {
     this._metrics = calculateRendererMetrics(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1, this._minCols, this._maxCols, this._rows);
     console.log(this._metrics.cols, this._metrics.rows, this._metrics.rendererWidth, this._metrics.rendererHeight);
     console.log("maxCols", this._maxCols);
-    this._tempBuffer = new PlainBuffer(this._metrics.cols, this._maxCols, this._metrics.rows);
+    this._buffer = new PlainBuffer(this._metrics.cols, this._maxCols, this._metrics.rows);
     this._atlas = new Atlas(this._palette);
     this._atlas.configure(this._metrics);
     this._renderer = new Renderer(config.canvas, this._atlas, this._metrics);
     this._renderer.clearColour = this.palette.getHexColour(0);
-    this._renderer.buffer = this._tempBuffer;
-    this.testPattern();
+    this._renderer.buffer = this._buffer;
     this._tickTimer = setInterval(this.tick, 30);
     window.addEventListener("resize", this.onresize);
     this._resizeNeeded = true;
+  }
+  get on() {
+    return this._emitter.on;
+  }
+  get off() {
+    return this._emitter.off;
   }
   get palette() {
     return this._palette;
@@ -2217,6 +2265,9 @@ class Unnamed {
   get rows() {
     return this._metrics.rows;
   }
+  get buffer() {
+    return this._buffer;
+  }
   onresize() {
     let newMetrics = calculateRendererMetrics(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1, this._minCols, this._maxCols, this._rows);
     if (this._metrics === undefined || newMetrics.cols != this._metrics.cols || newMetrics.rows != this._metrics.rows || newMetrics.cellWidth != this._metrics.cellWidth || newMetrics.cellHeight != this._metrics.cellHeight || newMetrics.rendererWidth != this._metrics.rendererWidth || newMetrics.rendererHeight != this._metrics.rendererHeight) {
@@ -2228,36 +2279,40 @@ class Unnamed {
   tick() {
     if (this._resizeNeeded) {
       this._resizeNeeded = false;
-      this._tempBuffer.configure(this._metrics);
+      this._buffer.configure(this._metrics);
       this._atlas.configure(this._metrics);
       this._renderer.configure(this._metrics);
-      this.testPattern();
+      this._emitter.emit("resize", { cols: this.cols, rows: this.rows });
       this._renderer.forceRender();
     }
-    this._renderer.render();
+    if (this._renderer.willRender()) {
+      this._emitter.emit("render", this._buffer.generation);
+      this._renderer.render();
+      this._buffer.bumpGeneration();
+    }
   }
   testPattern() {
-    this._tempBuffer.clear(0);
+    this._buffer.clear(0);
     let i = 1;
-    this._tempBuffer.print(0, 0, ">", 4128768);
-    this._tempBuffer.print(0, 1, ">", 4128768);
+    this._buffer.print(0, 0, ">", 4128768);
+    this._buffer.print(0, 1, ">", 4128768);
     for (;i < this.cols - 1; i++) {
       let num = i.toString();
       if (num.length > 1) {
-        this._tempBuffer.print(i, 0, num[0], 4128768);
-        this._tempBuffer.print(i, 1, num[1], 4128768);
+        this._buffer.print(i, 0, num[0], 4128768);
+        this._buffer.print(i, 1, num[1], 4128768);
       } else {
-        this._tempBuffer.print(i, 0, "0", 4128768);
-        this._tempBuffer.print(i, 1, num[0], 4128768);
+        this._buffer.print(i, 0, "0", 4128768);
+        this._buffer.print(i, 1, num[0], 4128768);
       }
     }
-    this._tempBuffer.print(i, 0, "<", 4128768);
-    this._tempBuffer.print(i, 1, "<", 4128768);
-    this._tempBuffer.print(2, 3, "[]MWgy#£!|", 4128768);
+    this._buffer.print(i, 0, "<", 4128768);
+    this._buffer.print(i, 1, "<", 4128768);
+    this._buffer.print(2, 3, "[]MWgy#£!|", 4128768);
     i = 0;
     let k = 2, j = 5;
     for (;i < 32; i++) {
-      this._tempBuffer.print(k, j, String.fromCharCode(i), 4128768);
+      this._buffer.print(k, j, String.fromCharCode(i), 4128768);
       k += 2;
       if (k == 10) {
         k = 2;
@@ -2280,13 +2335,13 @@ class Unnamed {
       "Héllo 世界 \uD83C\uDDEC\uD83C\uDDE7 Привет \uD83D\uDC68‍\uD83D\uDC69‍\uD83D\uDC67"
     ];
     for (i = 0;i < 16; i++) {
-      this._tempBuffer.print(15 + i * 3, 2, "   ", i << 20);
-      this._tempBuffer.print(15 + i * 3, 3, i.toString().padStart(3, " "), i << 16);
+      this._buffer.print(15 + i * 3, 2, "   ", i << 20);
+      this._buffer.print(15 + i * 3, 3, i.toString().padStart(3, " "), i << 16);
     }
     for (i = 0;i < textStrings.length; i++) {
-      this._tempBuffer.print(2, 4 + i, textStrings[i], (i + 2 << 4 | 15) << 16);
+      this._buffer.print(2, 4 + i, textStrings[i], (i + 2 << 4 | 15) << 16);
     }
-    this._tempBuffer.border(9, 18, 30, 10, [
+    this._buffer.border(9, 18, 30, 10, [
       19 | 983040,
       6 | 983040,
       20 | 196608,
@@ -2297,7 +2352,7 @@ class Unnamed {
       4 | 196608,
       22 | 196608
     ]);
-    this._tempBuffer.border(9, 28, 30, 10, [
+    this._buffer.border(9, 28, 30, 10, [
       19 | 983040,
       6 | 983040,
       20 | 983040,
@@ -2308,7 +2363,7 @@ class Unnamed {
       23 | 983040,
       24 | 983040
     ]);
-    this._tempBuffer.border(40, 18, 30, 10, [
+    this._buffer.border(40, 18, 30, 10, [
       19 | 524288,
       6 | 524288,
       20 | 524288,
@@ -2319,7 +2374,7 @@ class Unnamed {
       23 | 524288,
       24 | 524288
     ]);
-    this._tempBuffer.border(40, 28, 30, 10, [
+    this._buffer.border(40, 28, 30, 10, [
       15 | 327680,
       5 | 327680,
       16 | 327680,
@@ -2339,3 +2394,13 @@ var un = new Unnamed({
   maxCols: 120,
   rows: 40
 });
+var buf = un.buffer;
+un.on("resize", (evt) => {
+  buf.print(3, 3, `${evt.cols} x ${evt.rows}`, 524288);
+});
+un.on("render", (gen) => {
+  buf.fill(10, 0, 7, 1, 983072);
+  buf.print(10, 0, `Gen: ${gen} `, 983040);
+});
+buf.print(0, 0, "Hello", 983040);
+buf.print(0, 1, "-----", 917504);

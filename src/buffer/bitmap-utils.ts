@@ -14,16 +14,26 @@ export class Bitmap32Utils {
         }
     }
 
-    static Print(dst:Bitmap32, x: number, y:number, text: string, attr:number) {
-        const textFlags = TextTools.getTextFlags(text);
-        if (textFlags <= TextFlags.LATIN_1) {
-            Bitmap32Utils.PrintEncoded(dst, x, y, text, attr);
+    static Print(dst:Bitmap32, x: number, y:number, text: string|Array32, attr:number|undefined) {
+
+        if (!dst)
+            return;
+
+        if (typeof text === 'string') {
+            const textFlags = TextTools.getTextFlags(text);
+            if (textFlags <= TextFlags.LATIN_1) {
+                Bitmap32Utils._PrintLatin1(dst, x, y, text, attr || 0x000F_0000);
+            }
+            else {
+                Bitmap32Utils._PrintArray(dst, x, y, TextTools.EncodeArray32(text, undefined, undefined, attr), undefined);
+            }
         }
         else {
-            Bitmap32Utils.PrintArray(dst, x, y, TextTools.encode2(text), attr);
+            Bitmap32Utils._PrintArray(dst, x, y, text, attr);
         }
     }
-    static PrintEncoded(dst:Bitmap32, x: number, y:number, text: string, attr:number) {
+
+    private static _PrintLatin1(dst:Bitmap32, x: number, y:number, text: string, attr:number) {
         if (!dst)
             return;
 
@@ -51,7 +61,7 @@ export class Bitmap32Utils {
         }
     }
 
-    static PrintArray(dst:Bitmap32, x: number, y:number, array:Array32, attr:number|undefined) {
+    private static _PrintArray(dst:Bitmap32, x: number, y:number, array:Array32, attr:number|undefined) {
         if (!dst)
             return;
 
@@ -85,6 +95,7 @@ export class Bitmap32Utils {
             }
         }
     }
+
     static HLine(dst:Bitmap32, x: number, y:number, w:number, value: number) {
         if (!dst)
             return;
@@ -166,19 +177,15 @@ export class Bitmap32Utils {
         if (w < 3 || h < 3)
             return;
 
-        // Corners
         Bitmap32Utils.Set(dst, x, y, glyphs[0]!);
         Bitmap32Utils.Set(dst, x + w - 1, y, glyphs[2]!);
         Bitmap32Utils.Set(dst, x, y + h - 1, glyphs[6]!);
         Bitmap32Utils.Set(dst, x + w - 1, y + h - 1, glyphs[8]!);
-
-        // Edges
         Bitmap32Utils.HLine(dst, x + 1, y, w - 2, glyphs[1]!);
         Bitmap32Utils.HLine(dst, x + 1, y + h - 1, w - 2, glyphs[7]!);
         Bitmap32Utils.VLine(dst, x, y + 1, h - 2, glyphs[3]!);
         Bitmap32Utils.VLine(dst, x + w - 1, y + 1, h - 2, glyphs[5]!);
 
-        // Fill (optional)
         Bitmap32Utils.Fill(dst, x + 1, y + 1, w - 2, h - 2, glyphs[4]!);
     }
 
@@ -291,16 +298,5 @@ export class Bitmap32Utils {
         }
 
     }
-
-    /*
-
-PETSCII Idea for characters 3-31
-
-    const isText = char >> 5;  // non-zero if >= 32
-const mask = -isText;      // 0xFFFFFFFF if text, 0 if structural
-dstBuf[i] = (cell & ~mask) | (replacement & mask);
-
-
-     */
 
 }

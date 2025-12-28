@@ -2,6 +2,7 @@ import { Bitmap32Utils } from "./bitmap-utils.ts";
 import { Bitmap32 } from "./bitmap32.ts";
 import { type IBuffer } from "./buffer.ts";
 import type {RendererMetrics} from "../metrics.ts";
+import { Array32 } from "./array32.ts";
 
 export class PlainBuffer implements IBuffer {
 
@@ -49,6 +50,16 @@ export class PlainBuffer implements IBuffer {
     get stride(): number {
         return this._glyphs.stride;
     }
+
+    bumpGeneration() {
+        this._dirtyGeneration = this._generation;
+        this._generation++;
+        if (this._generation >= 255) {
+            this._generation = 1;
+        }
+        this._generationBits = this._generation << 24;
+    }
+
     clear(char_attr: number): void {
         Bitmap32Utils.Clear(this._glyphs, (char_attr & 0x00FFFFFF) | this._generationBits);
         this._dirtyGeneration = this._generation;
@@ -69,7 +80,7 @@ export class PlainBuffer implements IBuffer {
         Bitmap32Utils.Fill(this._glyphs, x, y, w, h, (char_attr & 0x00FFFFFF) | this._generationBits);
         this._dirtyGeneration = this._generation;
     }
-    print(x:number, y:number, text:string, char_attr:number):void {
+    print(x:number, y:number, text:string|Array32, char_attr:number):void {
         Bitmap32Utils.Print(this._glyphs, x, y, text, (char_attr & 0x00FF0000) | this._generationBits);
         this._dirtyGeneration = this._generation;
     }
