@@ -117,6 +117,10 @@ export class Renderer {
         }
 
         if (force) {
+
+            this._ctx.fillStyle = this._clearColour;
+            this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
+
             RendererUtils.RenderCopy(this._ctx, this, buffer, this._atlas);
         }
         else {
@@ -147,11 +151,6 @@ export class Renderer {
         }
 
         if (this._forceRender || (this._rendererBuffer != null && this._rendererBuffer.dirty)) {
-
-            this._ctx.fillStyle = this._clearColour;
-
-            this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
-
 
             if (this._rendererBuffer != null) {
                 this.renderFromBuffer(this._rendererBuffer, this._forceRender);
