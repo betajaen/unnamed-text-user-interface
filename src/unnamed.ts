@@ -39,9 +39,18 @@ type ResizeEvent = {
     rows: number;
 }
 
+type KeyEvent = {
+    key: string;
+    code: string;
+    char: number;
+    meta: boolean;
+}
+
 type UnnamedEvents = {
     resize: ResizeEvent;
     render: number;
+    keydown: KeyEvent;
+    keyup: KeyEvent;
     error: Error;
 }
 
@@ -62,6 +71,8 @@ export class Unnamed {
 
         this.tick = this.tick.bind(this);
         this.onresize = this.onresize.bind(this);
+        this.onkeydown = this.onkeydown.bind(this);
+        this.onkeyup = this.onkeyup.bind(this);
 
         if (config.palette === undefined) {
             this.palette.set(0, 0x1f, 0x0e, 0x1c);  // 0  - Near black (dark purple)
@@ -113,6 +124,8 @@ export class Unnamed {
 
         this._tickTimer = setInterval(this.tick, 30);
         window.addEventListener("resize", this.onresize);
+        window.addEventListener('keydown', this.onkeydown);
+        window.addEventListener('keyup', this.onkeyup);
         this._resizeNeeded = true;
     }
 
@@ -146,6 +159,24 @@ export class Unnamed {
 
     get buffer():IBuffer {
         return this._buffer;
+    }
+
+    onkeyup(e: KeyboardEvent) {
+        this._emitter.emit('keyup', {
+            key: e.key,
+            code: e.code,
+            char: e.charCode,
+            meta: e.metaKey
+        });
+    }
+
+    onkeydown(e: KeyboardEvent) {
+        this._emitter.emit('keydown', {
+            key: e.key,
+            code: e.code,
+            char: e.charCode,
+            meta: e.metaKey
+        });
     }
 
     onresize() {

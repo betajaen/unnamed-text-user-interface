@@ -207,6 +207,8 @@ class Renderer {
       return;
     }
     if (force) {
+      this._ctx.fillStyle = this._clearColour;
+      this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
       RendererUtils.RenderCopy(this._ctx, this, buffer, this._atlas);
     } else {
       if (buffer.dirty) {
@@ -228,8 +230,6 @@ class Renderer {
       return;
     }
     if (this._forceRender || this._rendererBuffer != null && this._rendererBuffer.dirty) {
-      this._ctx.fillStyle = this._clearColour;
-      this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
       if (this._rendererBuffer != null) {
         this.renderFromBuffer(this._rendererBuffer, this._forceRender);
       } else {
@@ -2152,8 +2152,8 @@ class PlainBuffer {
     return this._generation;
   }
   set generation(generation) {
-    this._generation = generation;
-    this._generationBits = generation << 24;
+    this._generation = generation >>> 0;
+    this._generationBits = generation << 24 >>> 0;
     this._dirtyGeneration = 255;
   }
   get generationBits() {
@@ -2180,7 +2180,7 @@ class PlainBuffer {
     if (this._generation >= 255) {
       this._generation = 1;
     }
-    this._generationBits = this._generation << 24;
+    this._generationBits = this._generation << 24 >>> 0;
   }
   clear(char_attr) {
     Bitmap32Utils.Clear(this._glyphs, char_attr & 16777215 | this._generationBits);
@@ -2279,6 +2279,8 @@ class Unnamed {
   constructor(config) {
     this.tick = this.tick.bind(this);
     this.onresize = this.onresize.bind(this);
+    this.onkeydown = this.onkeydown.bind(this);
+    this.onkeyup = this.onkeyup.bind(this);
     if (config.palette === undefined) {
       this.palette.set(0, 31, 14, 28);
       this.palette.set(1, 23, 67, 75);
@@ -2313,6 +2315,8 @@ class Unnamed {
     this._renderer.buffer = this._buffer;
     this._tickTimer = setInterval(this.tick, 30);
     window.addEventListener("resize", this.onresize);
+    window.addEventListener("keydown", this.onkeydown);
+    window.addEventListener("keyup", this.onkeyup);
     this._resizeNeeded = true;
   }
   get on() {
@@ -2338,6 +2342,22 @@ class Unnamed {
   }
   get buffer() {
     return this._buffer;
+  }
+  onkeyup(e) {
+    this._emitter.emit("keyup", {
+      key: e.key,
+      code: e.code,
+      char: e.charCode,
+      meta: e.metaKey
+    });
+  }
+  onkeydown(e) {
+    this._emitter.emit("keydown", {
+      key: e.key,
+      code: e.code,
+      char: e.charCode,
+      meta: e.metaKey
+    });
   }
   onresize() {
     let newMetrics = calculateRendererMetrics(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1, this._minCols, this._maxCols, this._rows);
@@ -2470,8 +2490,13 @@ un.on("resize", (evt) => {
   buf.print(3, 3, `${evt.cols} × ${evt.rows}`, 524288);
 });
 un.on("render", (gen) => {
-  buf.fill(10, 0, 7, 1, 983072);
   buf.print(10, 0, `Gen: ${gen} `, 983040);
+});
+un.on("keyup", (e) => {
+  buf.print(5, 20, `${e.key}   Up.    `, 983040);
+});
+un.on("keydown", (e) => {
+  buf.print(5, 20, `${e.key}  Down.   `, 983040);
 });
 buf.print(0, 0, "Hello", 983040);
 buf.hline(0, 1, 5, 917527);
