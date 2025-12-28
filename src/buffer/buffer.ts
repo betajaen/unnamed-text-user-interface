@@ -9,7 +9,7 @@ export interface IBuffer {
     set generation(generation:number);
     clear(char_attr:number):void;
     set(x:number, y:number, char_attr:number):void;
-    hline(x:number, y:number, w: number, char_attr:number):void;
+    hline(x:number, y:number, w: number, char_attr:number, pattern?:number):void;
     vline(x:number, y:number, h: number, char_attr:number):void;
     fill(x:number, y:number, w:number, h:number, char_attr:number):void;
     print(x:number, y:number, text:string|Array32, char_attr:number):void;

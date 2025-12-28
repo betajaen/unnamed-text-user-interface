@@ -208,7 +208,7 @@ export class Unnamed {
         }
         this._buffer.print(i, 0, "<", 0x003F0000);
         this._buffer.print(i, 1, "<", 0x003F0000);
-        this._buffer.print(2,3, "[]MWgy#£!|", 0x003F0000);
+        this._buffer.print(2, 3, "[]MWgy#£!|", 0x003F0000);
         i = 0;
         let k = 2, j = 5;
         for(;i < 32;i++) {

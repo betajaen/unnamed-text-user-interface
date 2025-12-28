@@ -2,6 +2,10 @@ import { Bitmap32 } from "./bitmap.ts";
 import { TextFlags, TextTools } from "../text-tools.ts";
 import { Array32 } from "./array32.ts";
 
+function ror(value: number, shift: number): number {
+    return ((value >>> shift) | (value << shift)) >>> 0;
+}
+
 export class Bitmap32Utils {
 
     static Clear(dst:Bitmap32, value:number) {
@@ -96,7 +100,7 @@ export class Bitmap32Utils {
         }
     }
 
-    static HLine(dst:Bitmap32, x: number, y:number, w:number, value: number) {
+    static HLine(dst:Bitmap32, x: number, y:number, w:number, value: number, pattern: number) {
         if (!dst)
             return;
 
@@ -114,7 +118,27 @@ export class Bitmap32Utils {
         if (left >= right)
             return;
 
-        buf.fill(value, left + (y * stride), right + (y * stride));
+        if (pattern == 0xFFFF_FFFF) {
+            buf.fill(value, left + (y * stride), right + (y * stride));
+        }
+        else {
+            let bg = (0x00F0_0000 & value);
+            let fg = (0x000F_0000 & value);
+            let off_value = ( (bg >> 4) | (fg << 4) ) | (value & 0xFF00_FFFF);
+            let off = left + (y * stride);
+            let p = (pattern & 0xFFFF_FFFF) >>> 0;
+
+            for(let i=left;i < right;i++) {
+                if (p & 1) {
+                    buf[off] = value;
+                }
+                else {
+                    buf[off] = off_value;
+                }
+                p = ( (p >>> 1) | (p << 31) ) >>> 0;
+                off++;
+            }
+        }
     }
 
     static VLine(dst:Bitmap32, x: number, y:number, h:number, value: number) {

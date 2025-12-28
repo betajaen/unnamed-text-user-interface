@@ -68,8 +68,8 @@ export class PlainBuffer implements IBuffer {
         Bitmap32Utils.Set(this._glyphs, x, y, (char_attr & 0x00FFFFFF) | this._generationBits);
         this._dirtyGeneration = this._generation;
     }
-    hline(x: number, y: number, w: number, char_attr: number): void {
-        Bitmap32Utils.HLine(this._glyphs, x, y, w, (char_attr & 0x00FFFFFF) | this._generationBits);
+    hline(x: number, y: number, w: number, char_attr: number, pattern?:number): void {
+        Bitmap32Utils.HLine(this._glyphs, x, y, w, (char_attr & 0x00FFFFFF) | this._generationBits, pattern || 0xFFFF_FFFF);
         this._dirtyGeneration = this._generation;
     }
     vline(x: number, y: number, h: number, char_attr: number): void {
