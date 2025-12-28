@@ -28,8 +28,8 @@ export class PlainBuffer implements IBuffer {
         return this._generation;
     }
     set generation(generation: number) {
-        this._generation = generation;
-        this._generationBits = generation << 24;
+        this._generation = generation >>> 0;
+        this._generationBits = (generation << 24) >>> 0;
         this._dirtyGeneration = 0xFF;
     }
     get generationBits() {
@@ -57,7 +57,7 @@ export class PlainBuffer implements IBuffer {
         if (this._generation >= 255) {
             this._generation = 1;
         }
-        this._generationBits = this._generation << 24;
+        this._generationBits = (this._generation << 24) >>> 0;
     }
 
     clear(char_attr: number): void {
