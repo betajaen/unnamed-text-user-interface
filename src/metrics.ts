@@ -3,6 +3,7 @@ const CHAR_ASPECT = 0.5;
 
 export type RendererMetrics = {
     cols: number;
+    maxCols: number;
     rows: number;
     cellWidth: number;
     cellHeight: number;
@@ -42,6 +43,7 @@ export function calculateRendererMetrics(
 
     return {
         cols: cols,
+        maxCols: maxCols,
         rows: rows,
         cellWidth: cellWidth,
         cellHeight: cellHeight,

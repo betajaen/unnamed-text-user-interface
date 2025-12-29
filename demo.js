@@ -47,262 +47,6 @@ class Palette {
   }
 }
 
-// src/renderer/renderer-utils.ts
-class RendererUtils {
-  static RenderCopy(dst, renderer, buffer, atlas) {
-    if (renderer === undefined || buffer === undefined || dst === undefined || atlas === undefined) {
-      return;
-    }
-    let x = 0, y = 0, idx = 0, tidx = 0, cols = 0, stride = buffer.stride, rows = buffer.rows;
-    let srcSheetNum = -1;
-    let srcSheet;
-    const buf = buffer.glyphs.buffer;
-    const cellW = renderer.cellW;
-    const cellH = renderer.cellH;
-    const scaledW = cellW * renderer.dpr;
-    const scaledH = cellH * renderer.dpr;
-    while (rows--) {
-      tidx = idx;
-      cols = buffer.cols;
-      while (cols--) {
-        const char_attr = buf[idx++];
-        if (char_attr !== 0) {
-          const entry = atlas.get(char_attr);
-          if (entry.sheet != srcSheetNum) {
-            srcSheet = atlas.getSheet(entry.sheet).canvas;
-            srcSheetNum = entry.sheet;
-          }
-          dst.drawImage(srcSheet, entry.x, entry.y, scaledW, scaledH, x, y, cellW, cellH);
-        }
-        x += cellW;
-      }
-      x = 0;
-      y += cellH;
-      idx = tidx + stride;
-    }
-  }
-  static RenderCopyTested(dst, renderer, buffer, atlas) {
-    if (renderer === undefined || buffer === undefined || dst === undefined || atlas === undefined) {
-      return;
-    }
-    let x = 0, y = 0, idx = 0, tidx = 0, cols = 0, stride = buffer.stride, rows = buffer.rows;
-    let srcSheetNum = -1;
-    let srcSheet;
-    const buf = buffer.glyphs.buffer;
-    const genBits = buffer.generationBits;
-    const cellW = renderer.cellW;
-    const cellH = renderer.cellH;
-    const scaledW = cellW * renderer.dpr;
-    const scaledH = cellH * renderer.dpr;
-    while (rows--) {
-      tidx = idx;
-      cols = buffer.cols;
-      while (cols--) {
-        const char_attr = buf[idx++];
-        if ((char_attr & 4278190080) !== genBits) {
-          x += cellW;
-          continue;
-        }
-        if (char_attr != 0) {
-          const entry = atlas.get(char_attr);
-          if (entry.sheet != srcSheetNum) {
-            srcSheet = atlas.getSheet(entry.sheet).canvas;
-            srcSheetNum = entry.sheet;
-          }
-          dst.drawImage(srcSheet, entry.x, entry.y, scaledW, scaledH, x, y, cellW, cellH);
-        }
-        x += cellW;
-      }
-      x = 0;
-      y += cellH;
-      idx = tidx + stride;
-    }
-  }
-}
-
-// src/renderer/bitmap-renderer.ts
-class BitmapRenderer {
-  _container;
-  _canvas;
-  _ctx;
-  _atlas;
-  _cols = 0;
-  _rows = 0;
-  _dpr = 1;
-  _cellW = 0;
-  _cellH = 0;
-  _viewW = 0;
-  _viewH = 0;
-  _forceRender = false;
-  _rendererBuffer = null;
-  _clearColour = "#000000";
-  constructor(container, canvas, atlas, metrics) {
-    this._container = container;
-    this._canvas = canvas;
-    this._ctx = canvas.getContext("2d");
-    this._atlas = atlas;
-  }
-  configure(metrics, containerOnly) {
-    this._container.style.left = metrics.containerLeft + "px";
-    this._container.style.top = metrics.containerTop + "px";
-    if (containerOnly) {
-      return;
-    }
-    this._container.style.width = metrics.rendererWidth + "px";
-    this._container.style.height = metrics.rendererHeight + "px";
-    this._canvas.style.width = metrics.rendererWidth + "px";
-    this._canvas.style.height = metrics.rendererHeight + "px";
-    this._canvas.width = metrics.rendererWidth * metrics.dpr;
-    this._canvas.height = metrics.rendererHeight * metrics.dpr;
-    this._ctx.setTransform(metrics.dpr, 0, 0, metrics.dpr, 0, 0);
-    this._rows = metrics.rows;
-    this._cols = metrics.cols;
-    this._cellW = metrics.cellWidth;
-    this._cellH = metrics.cellHeight;
-    this._viewW = metrics.rendererWidth;
-    this._viewH = metrics.rendererHeight;
-    this._dpr = metrics.dpr;
-    this._forceRender = true;
-  }
-  renderGlyphAtXY(char_attr, x, y) {
-    const entry = this._atlas.get(char_attr);
-    const sheet = this._atlas.getSheet(entry.sheet);
-    const scaledW = this._cellW * this._dpr;
-    const scaledH = this._cellH * this._dpr;
-    this._ctx.drawImage(sheet.canvas, entry.x, entry.y, scaledW, scaledH, x, y, this._cellW, this._cellH);
-  }
-  forceRender() {
-    this._forceRender = true;
-  }
-  get width() {
-    return this._canvas.width;
-  }
-  get height() {
-    return this._canvas.height;
-  }
-  get cols() {
-    return this._cols;
-  }
-  get rows() {
-    return this._rows;
-  }
-  get cellW() {
-    return this._cellW;
-  }
-  get cellH() {
-    return this._cellH;
-  }
-  get dpr() {
-    return this._dpr;
-  }
-  get buffer() {
-    return this._rendererBuffer;
-  }
-  set clearColour(clearColour) {
-    this._clearColour = clearColour;
-    document.body.style.backgroundColor = clearColour;
-  }
-  set buffer(buffer) {
-    this._rendererBuffer = buffer;
-    this._forceRender = true;
-  }
-  renderFromBuffer(buffer, force = false) {
-    if (this._rows == 0 || this._cols == 0) {
-      this._ctx.fillStyle = "darkred";
-      this._ctx.fillRect(0, 0, 1024, 1024);
-      return;
-    }
-    if (force == false && buffer.dirty == false) {
-      return;
-    }
-    if (force) {
-      this._ctx.fillStyle = this._clearColour;
-      this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
-      RendererUtils.RenderCopy(this._ctx, this, buffer, this._atlas);
-    } else {
-      if (buffer.dirty) {
-        RendererUtils.RenderCopyTested(this._ctx, this, buffer, this._atlas);
-      }
-    }
-  }
-  willRender() {
-    if (this._cellW === 0 || this._cellH === 0) {
-      return false;
-    }
-    if (this._forceRender || this._rendererBuffer != null && this._rendererBuffer.dirty) {
-      return true;
-    }
-    return false;
-  }
-  render() {
-    if (this._cellW === 0 || this._cellH === 0) {
-      return;
-    }
-    if (this._forceRender || this._rendererBuffer != null && this._rendererBuffer.dirty) {
-      if (this._rendererBuffer != null) {
-        this.renderFromBuffer(this._rendererBuffer, this._forceRender);
-      } else {
-        const str = "<Empty Buffer>";
-        let x = 0, y = 0;
-        for (let i = 0;i < str.length; i++) {
-          const char = str.charCodeAt(i);
-          let attr = (15 | i << 4) << 16;
-          this.renderGlyphAtXY(char | attr, x, y);
-          x += this._cellW;
-        }
-      }
-      this._forceRender = false;
-    }
-  }
-}
-
-// src/atlas/atlas-sheet.ts
-var SHEET_SIZE = 512;
-
-class AtlasSheet {
-  _canvas;
-  _ctx;
-  _nextX = 0;
-  _nextY = 0;
-  _rowHeight = 0;
-  _id = 0;
-  constructor(id) {
-    this._canvas = document.createElement("canvas");
-    this._canvas.width = SHEET_SIZE;
-    this._canvas.height = SHEET_SIZE;
-    this._ctx = this._canvas.getContext("2d", { alpha: false });
-    this._id = id;
-  }
-  get canvas() {
-    return this._canvas;
-  }
-  get ctx() {
-    return this._ctx;
-  }
-  allocate(w, h) {
-    let nx = this._nextX;
-    let ny = this._nextY;
-    let rh = this._rowHeight;
-    if (this._nextX + w > SHEET_SIZE) {
-      nx = 0;
-      ny += rh;
-      rh = 0;
-    }
-    if (ny + h > SHEET_SIZE) {
-      return null;
-    }
-    this._nextX = nx + w;
-    this._nextY = ny;
-    this._rowHeight = Math.max(rh, h);
-    return { x: nx, y: ny, sheet: this._id };
-  }
-  clear() {
-    this._nextY = 0;
-    this._nextY = 0;
-    this._rowHeight = 0;
-  }
-}
-
 // src/buffer/array32.ts
 class Array32 {
   _buffer;
@@ -1347,6 +1091,701 @@ class TextTools {
   }
 }
 
+// src/buffer/bitmap-utils.ts
+class Bitmap32Utils {
+  static _temp = new Uint32Array(512);
+  static Clear(dst, value) {
+    dst.buffer.fill(value & 4294967295);
+  }
+  static Set(dst, x, y, value) {
+    if (x >= 0 && x < dst.cols && y >= 0 && y < dst.rows) {
+      dst.buffer[x + y * dst.stride] = value;
+    }
+  }
+  static Print(dst, x, y, text, attr) {
+    if (!dst)
+      return;
+    if (typeof text === "string") {
+      const textFlags = TextTools.getTextFlags(text);
+      if (textFlags <= 2 /* LATIN_1 */) {
+        Bitmap32Utils._PrintLatin1(dst, x, y, text, attr || 983040);
+      } else {
+        Bitmap32Utils._PrintArray(dst, x, y, TextTools.EncodeArray32(text, undefined, undefined, attr), undefined);
+      }
+    } else {
+      Bitmap32Utils._PrintArray(dst, x, y, text, attr);
+    }
+  }
+  static _PrintLatin1(dst, x, y, text, attr) {
+    if (!dst)
+      return;
+    const stride = dst.stride;
+    const cols = dst.cols;
+    const rows = dst.rows;
+    const buf = dst.buffer;
+    if (y < 0 || y >= rows)
+      return;
+    const len = text.length;
+    const left = x < 0 ? 0 : x;
+    const right = x + len > cols ? cols : x + len;
+    if (left >= right)
+      return;
+    const textStart = left - x;
+    const width = right - left;
+    let offset = left + y * stride;
+    for (let i = textStart;i < textStart + width; i++) {
+      buf[offset++] = text.charCodeAt(i) & 65535 | attr;
+    }
+  }
+  static _PrintArray(dst, x, y, array, attr) {
+    if (!dst)
+      return;
+    const stride = dst.stride;
+    const cols = dst.cols;
+    const rows = dst.rows;
+    const buf = dst.buffer;
+    if (y < 0 || y >= rows)
+      return;
+    const len = array.size;
+    const left = x < 0 ? 0 : x;
+    const right = x + len > cols ? cols : x + len;
+    if (left >= right)
+      return;
+    const textStart = left - x;
+    const width = right - left;
+    let offset = left + y * stride;
+    if (attr === undefined) {
+      for (let i = textStart;i < textStart + width; i++) {
+        buf[offset++] = array.get(i);
+      }
+    } else {
+      for (let i = textStart;i < textStart + width; i++) {
+        buf[offset++] = array.get(i) | attr;
+      }
+    }
+  }
+  static HLine(dst, x, y, w, value, pattern) {
+    if (!dst)
+      return;
+    const stride = dst.stride;
+    const cols = dst.cols;
+    const rows = dst.rows;
+    const buf = dst.buffer;
+    if (y < 0 || y >= rows)
+      return;
+    const left = x < 0 ? 0 : x;
+    const right = x + w > cols ? cols : x + w;
+    if (left >= right)
+      return;
+    pattern = (pattern & 4294967295) >>> 0;
+    if (pattern == 4294967295) {
+      buf.fill(value, left + y * stride, right + y * stride);
+    } else {
+      let bg = 15728640 & value;
+      let fg = 983040 & value;
+      let off_value = bg >> 4 | fg << 4 | value & 4278255615;
+      let off = left + y * stride;
+      let p = pattern;
+      for (let i = left;i < right; i++) {
+        if (p & 1) {
+          buf[off] = value;
+        } else {
+          buf[off] = off_value;
+        }
+        p = (p >>> 1 | p << 31) >>> 0;
+        off++;
+      }
+    }
+  }
+  static VLine(dst, x, y, h, value, pattern) {
+    if (!dst)
+      return;
+    const stride = dst.stride;
+    const cols = dst.cols;
+    const rows = dst.rows;
+    const buf = dst.buffer;
+    if (x < 0 || x >= cols)
+      return;
+    const top = y < 0 ? 0 : y;
+    const bottom = y + h > rows ? rows : y + h;
+    if (top >= bottom)
+      return;
+    pattern = (pattern & 4294967295) >>> 0;
+    if (pattern === 4294967295) {
+      let offset = x + top * stride;
+      for (let row = top;row < bottom; row++) {
+        buf[offset] = value;
+        offset += stride;
+      }
+    } else {
+      let bg = 15728640 & value;
+      let fg = 983040 & value;
+      let off_value = bg >> 4 | fg << 4 | value & 4278255615;
+      let p = pattern;
+      let offset = x + top * stride;
+      for (let row = top;row < bottom; row++) {
+        if (p & 1) {
+          buf[offset] = value;
+        } else {
+          buf[offset] = off_value;
+        }
+        p = (p >>> 1 | p << 31) >>> 0;
+        offset += stride;
+      }
+    }
+  }
+  static Fill(dst, x, y, w, h, value, pattern) {
+    if (!dst)
+      return;
+    const stride = dst.stride;
+    const cols = dst.cols;
+    const rows = dst.rows;
+    const buf = dst.buffer;
+    const left = x < 0 ? 0 : x;
+    const right = x + w > cols ? cols : x + w;
+    const top = y < 0 ? 0 : y;
+    const bottom = y + h > rows ? rows : y + h;
+    if (left >= right || top >= bottom)
+      return;
+    pattern = (pattern & 4294967295) >>> 0;
+    const width = right - left;
+    let offset = left + top * stride;
+    if (pattern === 4294967295) {
+      for (let row = top;row < bottom; row++) {
+        buf.fill(value, offset, offset + width);
+        offset += stride;
+      }
+    } else {
+      let bg = 15728640 & value;
+      let fg = 983040 & value;
+      let off_value = bg >> 4 | fg << 4 | value & 4278255615;
+      const tmp = Bitmap32Utils._temp;
+      let p_even = pattern & 65535;
+      let p_odd = pattern >> 16 & 65535;
+      for (let i = 0;i < width; i++) {
+        if (p_even & 1) {
+          tmp[i] = value;
+        } else {
+          tmp[i] = off_value;
+        }
+        p_even = ((p_even >>> 1 | p_even << 15) & 65535) >>> 0;
+        if (p_odd & 1) {
+          tmp[i + width] = value;
+        } else {
+          tmp[i + width] = off_value;
+        }
+        p_odd = ((p_odd >>> 1 | p_odd << 15) & 65535) >>> 0;
+      }
+      const tmp_even = tmp.subarray(0, width);
+      const tmp_odd = tmp.subarray(width, width + width);
+      for (let row = top;row < bottom; row++) {
+        if (row & 1) {
+          buf.set(tmp_even, offset);
+        } else {
+          buf.set(tmp_odd, offset);
+        }
+        offset += stride;
+      }
+    }
+  }
+  static Border(dst, x, y, w, h, glyphs) {
+    if (!dst)
+      return;
+    if (glyphs.length != 9)
+      return;
+    if (w < 3 || h < 3)
+      return;
+    Bitmap32Utils.Set(dst, x, y, glyphs[0]);
+    Bitmap32Utils.Set(dst, x + w - 1, y, glyphs[2]);
+    Bitmap32Utils.Set(dst, x, y + h - 1, glyphs[6]);
+    Bitmap32Utils.Set(dst, x + w - 1, y + h - 1, glyphs[8]);
+    Bitmap32Utils.HLine(dst, x + 1, y, w - 2, glyphs[1]);
+    Bitmap32Utils.HLine(dst, x + 1, y + h - 1, w - 2, glyphs[7]);
+    Bitmap32Utils.VLine(dst, x, y + 1, h - 2, glyphs[3]);
+    Bitmap32Utils.VLine(dst, x + w - 1, y + 1, h - 2, glyphs[5]);
+    Bitmap32Utils.Fill(dst, x + 1, y + 1, w - 2, h - 2, glyphs[4]);
+  }
+  static Blit(dst, src, dstX, dstY, srcX, srcY, w, h) {
+    if (!dst || !src || dst == src)
+      return;
+    const srcStride = src.stride;
+    const srcCols = src.cols;
+    const srcRows = src.rows;
+    const srcBuf = src.buffer;
+    const dstStride = dst.stride;
+    const dstCols = dst.cols;
+    const dstRows = dst.rows;
+    const dstBuf = dst.buffer;
+    if (dstX < 0) {
+      srcX -= dstX;
+      w += dstX;
+      dstX = 0;
+    }
+    if (srcX < 0) {
+      dstX -= srcX;
+      w += srcX;
+      srcX = 0;
+    }
+    if (dstY < 0) {
+      srcY -= dstY;
+      h += dstY;
+      dstY = 0;
+    }
+    if (srcY < 0) {
+      dstY -= srcY;
+      h += srcY;
+      srcY = 0;
+    }
+    if (dstX + w > dstCols)
+      w = dstCols - dstX;
+    if (srcX + w > srcCols)
+      w = srcCols - srcX;
+    if (dstY + h > dstRows)
+      h = dstRows - dstY;
+    if (srcY + h > srcRows)
+      h = srcRows - srcY;
+    if (w <= 0 || h <= 0)
+      return;
+    if (dstX < 0 || dstY < 0 || srcX < 0 || srcY < 0)
+      return;
+    if (dstX + w > dstCols || dstY + h > dstRows)
+      return;
+    if (srcX + w > srcCols || srcY + h > srcRows)
+      return;
+    let srcOffset = srcX + srcY * srcStride;
+    let dstOffset = dstX + dstY * dstStride;
+    for (let row = 0;row < h; row++) {
+      dstBuf.set(srcBuf.subarray(srcOffset, srcOffset + w), dstOffset);
+      srcOffset += srcStride;
+      dstOffset += dstStride;
+    }
+  }
+  static CopyAlways(dst, left) {
+    if (!dst || !left)
+      return;
+    if (dst.maxSize != left.maxSize)
+      return;
+    const len = dst.maxSize;
+    const dstBuf = dst.buffer;
+    const leftBuf = left.buffer;
+    dstBuf.set(leftBuf, 0);
+  }
+  static CopyNewer(dst, left, right) {
+    if (!dst || !left || !right)
+      return;
+    if (left.maxSize != right.maxSize || dst.maxSize != left.maxSize)
+      return;
+    const len = dst.maxSize;
+    const dstBuf = dst.buffer;
+    const leftBuf = left.buffer;
+    const rightBuf = right.buffer;
+    for (let i = 0;i < len; i++) {
+      dstBuf[i] = leftBuf[i] | rightBuf[i];
+    }
+  }
+  static CopyMask(dst, left, right, mask) {
+    if (!dst || !left || !right || !mask)
+      return;
+    if (left.maxSize != right.maxSize || dst.maxSize != mask.maxSize || left.maxSize != mask.maxSize)
+      return;
+    const len = dst.maxSize;
+    const dstBuf = dst.buffer;
+    const leftBuf = left.buffer;
+    const rightBuf = right.buffer;
+    const maskBuf = mask.buffer;
+    for (let i = 0;i < len; i++) {
+      dstBuf[i] = leftBuf[i] & ~maskBuf[i] | rightBuf[i] & maskBuf[i];
+    }
+  }
+}
+
+// src/buffer/bitmap32.ts
+class Bitmap32 {
+  _cols;
+  _stride;
+  _rows;
+  maxSize;
+  buffer;
+  constructor(cols, rows, stride) {
+    this._cols = Math.max(cols, 1);
+    this._rows = Math.max(rows, 1);
+    this._stride = stride;
+    this.maxSize = this._rows * this._stride;
+    this.buffer = new Uint32Array(this.maxSize);
+    console.log("New Bitmap32", this._cols, this._rows, this._stride);
+  }
+  get rows() {
+    return this._rows;
+  }
+  get cols() {
+    return this._cols;
+  }
+  set cols(cols) {
+    this._cols = cols;
+  }
+  get stride() {
+    return this._stride;
+  }
+  set stride(stride) {
+    const size = this._rows * stride;
+    if (size > this.maxSize) {
+      throw `Buffer to large! New: ${size}, Existing: ${this.maxSize} ${stride}`;
+    }
+    this._stride = stride;
+  }
+}
+
+// src/buffer/plain-buffer.ts
+class PlainBuffer {
+  _glyphs;
+  _generation = 0;
+  _generationBits = 0;
+  _dirtyGeneration = 255;
+  constructor(cols, maxCols, rows) {
+    this._glyphs = new Bitmap32(cols, rows, maxCols);
+    this._glyphs.buffer.fill(0);
+  }
+  configure(metrics) {
+    if (this._glyphs.rows != metrics.rows || this._glyphs.cols != metrics.cols) {
+      this._glyphs.cols = Math.min(this._glyphs.stride, metrics.cols);
+    }
+  }
+  get generation() {
+    return this._generation;
+  }
+  set generation(generation) {
+    this._generation = generation >>> 0;
+    this._generationBits = generation << 24 >>> 0;
+    this._dirtyGeneration = 255;
+  }
+  get generationBits() {
+    return this._generationBits;
+  }
+  get glyphs() {
+    return this._glyphs;
+  }
+  get dirty() {
+    return this._generation === this._dirtyGeneration;
+  }
+  get cols() {
+    return this._glyphs.cols;
+  }
+  get rows() {
+    return this._glyphs.rows;
+  }
+  get stride() {
+    return this._glyphs.stride;
+  }
+  bumpGeneration() {
+    this._dirtyGeneration = this._generation;
+    this._generation++;
+    if (this._generation >= 255) {
+      this._generation = 1;
+    }
+    this._generationBits = this._generation << 24 >>> 0;
+  }
+  clear(char_attr) {
+    Bitmap32Utils.Clear(this._glyphs, char_attr & 16777215 | this._generationBits);
+    this._dirtyGeneration = this._generation;
+  }
+  set(x, y, char_attr) {
+    Bitmap32Utils.Set(this._glyphs, x, y, char_attr & 16777215 | this._generationBits);
+    this._dirtyGeneration = this._generation;
+  }
+  hline(x, y, w, char_attr, pattern) {
+    Bitmap32Utils.HLine(this._glyphs, x, y, w, char_attr & 16777215 | this._generationBits, pattern || 4294967295);
+    this._dirtyGeneration = this._generation;
+  }
+  vline(x, y, h, char_attr, pattern) {
+    Bitmap32Utils.VLine(this._glyphs, x, y, h, char_attr & 16777215 | this._generationBits, pattern || 4294967295);
+    this._dirtyGeneration = this._generation;
+  }
+  fill(x, y, w, h, char_attr, pattern) {
+    Bitmap32Utils.Fill(this._glyphs, x, y, w, h, char_attr & 16777215 | this._generationBits, pattern || 4294967295);
+    this._dirtyGeneration = this._generation;
+  }
+  print(x, y, text, char_attr) {
+    Bitmap32Utils.Print(this._glyphs, x, y, text, char_attr & 16711680 | this._generationBits);
+    this._dirtyGeneration = this._generation;
+  }
+  border(x, y, w, h, char_attrs) {
+    if (char_attrs && char_attrs.length === 9) {
+      const char_attrs_gen = new Array(9);
+      for (let i = 0;i < 9; i++) {
+        char_attrs_gen[i] = char_attrs[i] & 16777215 | this._generationBits;
+      }
+      Bitmap32Utils.Border(this._glyphs, x, y, w, h, char_attrs_gen);
+      this._dirtyGeneration = this._generation;
+    }
+  }
+  blit(x, y, src, sx, sy, sw, sh) {
+    this._dirtyGeneration = this._generation;
+  }
+}
+
+// src/renderer/view-tools.ts
+class ViewTools {
+  static RenderCopy(dst, renderer, buffer, atlas) {
+    if (renderer === undefined || buffer === undefined || dst === undefined || atlas === undefined) {
+      return;
+    }
+    let x = 0, y = 0, idx = 0, tidx = 0, cols = 0, stride = buffer.stride, rows = buffer.rows;
+    let srcSheetNum = -1;
+    let srcSheet;
+    const buf = buffer.glyphs.buffer;
+    const cellW = renderer.cellW;
+    const cellH = renderer.cellH;
+    const scaledW = cellW * renderer.dpr;
+    const scaledH = cellH * renderer.dpr;
+    while (rows--) {
+      tidx = idx;
+      cols = buffer.cols;
+      while (cols--) {
+        const char_attr = buf[idx++];
+        if (char_attr !== 0) {
+          const entry = atlas.get(char_attr);
+          if (entry.sheet != srcSheetNum) {
+            srcSheet = atlas.getSheet(entry.sheet).canvas;
+            srcSheetNum = entry.sheet;
+          }
+          dst.drawImage(srcSheet, entry.x, entry.y, scaledW, scaledH, x, y, cellW, cellH);
+        }
+        x += cellW;
+      }
+      x = 0;
+      y += cellH;
+      idx = tidx + stride;
+    }
+  }
+  static RenderCopyTested(dst, renderer, buffer, atlas) {
+    if (renderer === undefined || buffer === undefined || dst === undefined || atlas === undefined) {
+      return;
+    }
+    let x = 0, y = 0, idx = 0, tidx = 0, cols = 0, stride = buffer.stride, rows = buffer.rows;
+    let srcSheetNum = -1;
+    let srcSheet;
+    const buf = buffer.glyphs.buffer;
+    const genBits = buffer.generationBits;
+    const cellW = renderer.cellW;
+    const cellH = renderer.cellH;
+    const scaledW = cellW * renderer.dpr;
+    const scaledH = cellH * renderer.dpr;
+    while (rows--) {
+      tidx = idx;
+      cols = buffer.cols;
+      while (cols--) {
+        const char_attr = buf[idx++];
+        if ((char_attr & 4278190080) !== genBits) {
+          x += cellW;
+          continue;
+        }
+        if (char_attr != 0) {
+          const entry = atlas.get(char_attr);
+          if (entry.sheet != srcSheetNum) {
+            srcSheet = atlas.getSheet(entry.sheet).canvas;
+            srcSheetNum = entry.sheet;
+          }
+          dst.drawImage(srcSheet, entry.x, entry.y, scaledW, scaledH, x, y, cellW, cellH);
+        }
+        x += cellW;
+      }
+      x = 0;
+      y += cellH;
+      idx = tidx + stride;
+    }
+  }
+}
+
+// src/renderer/view.ts
+class View {
+  _container;
+  _canvas;
+  _ctx;
+  _atlas;
+  _metrics;
+  _forceRender = false;
+  _buffer;
+  _clearColour = "#000000";
+  constructor(container, canvas, atlas, metrics, buffer, zIndex) {
+    this._container = container;
+    if (canvas === undefined) {
+      this._canvas = document.createElement("canvas");
+      this._canvas.style.left = "0";
+      this._canvas.style.top = "0";
+      this._canvas.style.pointerEvents = "none";
+      this._canvas.style.zIndex = `${zIndex || 0}`;
+      this._container.appendChild(this._canvas);
+    } else {
+      this._canvas = canvas;
+    }
+    this._ctx = this._canvas.getContext("2d");
+    if (buffer === undefined) {
+      this._buffer = new PlainBuffer(metrics.cols, metrics.maxCols, metrics.rows);
+    } else {
+      this._buffer = buffer;
+    }
+    this._metrics = { ...metrics };
+    this._atlas = atlas;
+  }
+  configure(metrics, containerOnly) {
+    this._container.style.left = metrics.containerLeft + "px";
+    this._container.style.top = metrics.containerTop + "px";
+    if (containerOnly) {
+      return;
+    }
+    this._container.style.width = metrics.rendererWidth + "px";
+    this._container.style.height = metrics.rendererHeight + "px";
+    this._canvas.style.width = metrics.rendererWidth + "px";
+    this._canvas.style.height = metrics.rendererHeight + "px";
+    this._canvas.width = metrics.rendererWidth * metrics.dpr;
+    this._canvas.height = metrics.rendererHeight * metrics.dpr;
+    this._ctx.setTransform(metrics.dpr, 0, 0, metrics.dpr, 0, 0);
+    this._metrics = { ...metrics };
+    this._forceRender = true;
+  }
+  renderGlyphAtXY(char_attr, x, y) {
+    const entry = this._atlas.get(char_attr);
+    const sheet = this._atlas.getSheet(entry.sheet);
+    const M = this._metrics;
+    const scaledW = M.cellWidth * M.dpr;
+    const scaledH = M.cellHeight * M.dpr;
+    this._ctx.drawImage(sheet.canvas, entry.x, entry.y, scaledW, scaledH, x, y, M.cellWidth, M.cellHeight);
+  }
+  forceRender() {
+    this._forceRender = true;
+  }
+  get width() {
+    return this._canvas.width;
+  }
+  get height() {
+    return this._canvas.height;
+  }
+  get metrics() {
+    return this._metrics;
+  }
+  get cols() {
+    return this._metrics.cols;
+  }
+  get rows() {
+    return this._metrics.rows;
+  }
+  get cellW() {
+    return this._metrics.cellWidth;
+  }
+  get cellH() {
+    return this._metrics.cellHeight;
+  }
+  get dpr() {
+    return this._metrics.dpr;
+  }
+  get buffer() {
+    return this._buffer;
+  }
+  set clearColour(clearColour) {
+    this._clearColour = clearColour;
+  }
+  set buffer(buffer) {
+    this._buffer = buffer;
+    this._forceRender = true;
+  }
+  renderFromBuffer(buffer, force = false) {
+    if (this.rows == 0 || this.cols == 0) {
+      this._ctx.fillStyle = "darkred";
+      this._ctx.fillRect(0, 0, 1024, 1024);
+      return;
+    }
+    if (force == false && buffer.dirty == false) {
+      return;
+    }
+    if (force) {
+      this._ctx.fillStyle = this._clearColour;
+      this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
+      ViewTools.RenderCopy(this._ctx, this, buffer, this._atlas);
+    } else {
+      if (buffer.dirty) {
+        ViewTools.RenderCopyTested(this._ctx, this, buffer, this._atlas);
+      }
+    }
+  }
+  willRender() {
+    if (this.cellW === 0 || this.cellH === 0) {
+      return false;
+    }
+    if (this._forceRender || this._buffer != null && this._buffer.dirty) {
+      return true;
+    }
+    return false;
+  }
+  render() {
+    if (this.cellW === 0 || this.cellH === 0) {
+      return false;
+    }
+    if (this._forceRender || this._buffer != null && this._buffer.dirty) {
+      if (this._buffer != null) {
+        this.renderFromBuffer(this._buffer, this._forceRender);
+      } else {
+        const str = "<Empty Buffer>";
+        const M = this._metrics;
+        let x = 0, y = 0;
+        for (let i = 0;i < str.length; i++) {
+          const char = str.charCodeAt(i);
+          let attr = (15 | i << 4) << 16;
+          this.renderGlyphAtXY(char | attr, x, y);
+          x += M.cellWidth;
+        }
+      }
+      this._forceRender = false;
+    }
+  }
+}
+
+// src/atlas/atlas-sheet.ts
+var SHEET_SIZE = 512;
+
+class AtlasSheet {
+  _canvas;
+  _ctx;
+  _nextX = 0;
+  _nextY = 0;
+  _rowHeight = 0;
+  _id = 0;
+  constructor(id) {
+    this._canvas = document.createElement("canvas");
+    this._canvas.width = SHEET_SIZE;
+    this._canvas.height = SHEET_SIZE;
+    this._ctx = this._canvas.getContext("2d", { alpha: false });
+    this._id = id;
+  }
+  get canvas() {
+    return this._canvas;
+  }
+  get ctx() {
+    return this._ctx;
+  }
+  allocate(w, h) {
+    let nx = this._nextX;
+    let ny = this._nextY;
+    let rh = this._rowHeight;
+    if (this._nextX + w > SHEET_SIZE) {
+      nx = 0;
+      ny += rh;
+      rh = 0;
+    }
+    if (ny + h > SHEET_SIZE) {
+      return null;
+    }
+    this._nextX = nx + w;
+    this._nextY = ny;
+    this._rowHeight = Math.max(rh, h);
+    return { x: nx, y: ny, sheet: this._id };
+  }
+  clear() {
+    this._nextY = 0;
+    this._nextY = 0;
+    this._rowHeight = 0;
+  }
+}
+
 // src/atlas/atlas.ts
 var FONT_FAMILY = '"Cascadia Code", Menlo, monospace';
 var ASCENT_GLYPHS = ["|", "É", "q", "Å"];
@@ -1798,438 +2237,6 @@ class Atlas {
   }
 }
 
-// src/buffer/bitmap-utils.ts
-class Bitmap32Utils {
-  static _temp = new Uint32Array(512);
-  static Clear(dst, value) {
-    dst.buffer.fill(value & 4294967295);
-  }
-  static Set(dst, x, y, value) {
-    if (x >= 0 && x < dst.cols && y >= 0 && y < dst.rows) {
-      dst.buffer[x + y * dst.stride] = value;
-    }
-  }
-  static Print(dst, x, y, text, attr) {
-    if (!dst)
-      return;
-    if (typeof text === "string") {
-      const textFlags = TextTools.getTextFlags(text);
-      if (textFlags <= 2 /* LATIN_1 */) {
-        Bitmap32Utils._PrintLatin1(dst, x, y, text, attr || 983040);
-      } else {
-        Bitmap32Utils._PrintArray(dst, x, y, TextTools.EncodeArray32(text, undefined, undefined, attr), undefined);
-      }
-    } else {
-      Bitmap32Utils._PrintArray(dst, x, y, text, attr);
-    }
-  }
-  static _PrintLatin1(dst, x, y, text, attr) {
-    if (!dst)
-      return;
-    const stride = dst.stride;
-    const cols = dst.cols;
-    const rows = dst.rows;
-    const buf = dst.buffer;
-    if (y < 0 || y >= rows)
-      return;
-    const len = text.length;
-    const left = x < 0 ? 0 : x;
-    const right = x + len > cols ? cols : x + len;
-    if (left >= right)
-      return;
-    const textStart = left - x;
-    const width = right - left;
-    let offset = left + y * stride;
-    for (let i = textStart;i < textStart + width; i++) {
-      buf[offset++] = text.charCodeAt(i) & 65535 | attr;
-    }
-  }
-  static _PrintArray(dst, x, y, array, attr) {
-    if (!dst)
-      return;
-    const stride = dst.stride;
-    const cols = dst.cols;
-    const rows = dst.rows;
-    const buf = dst.buffer;
-    if (y < 0 || y >= rows)
-      return;
-    const len = array.size;
-    const left = x < 0 ? 0 : x;
-    const right = x + len > cols ? cols : x + len;
-    if (left >= right)
-      return;
-    const textStart = left - x;
-    const width = right - left;
-    let offset = left + y * stride;
-    if (attr === undefined) {
-      for (let i = textStart;i < textStart + width; i++) {
-        buf[offset++] = array.get(i);
-      }
-    } else {
-      for (let i = textStart;i < textStart + width; i++) {
-        buf[offset++] = array.get(i) | attr;
-      }
-    }
-  }
-  static HLine(dst, x, y, w, value, pattern) {
-    if (!dst)
-      return;
-    const stride = dst.stride;
-    const cols = dst.cols;
-    const rows = dst.rows;
-    const buf = dst.buffer;
-    if (y < 0 || y >= rows)
-      return;
-    const left = x < 0 ? 0 : x;
-    const right = x + w > cols ? cols : x + w;
-    if (left >= right)
-      return;
-    pattern = (pattern & 4294967295) >>> 0;
-    if (pattern == 4294967295) {
-      buf.fill(value, left + y * stride, right + y * stride);
-    } else {
-      let bg = 15728640 & value;
-      let fg = 983040 & value;
-      let off_value = bg >> 4 | fg << 4 | value & 4278255615;
-      let off = left + y * stride;
-      let p = pattern;
-      for (let i = left;i < right; i++) {
-        if (p & 1) {
-          buf[off] = value;
-        } else {
-          buf[off] = off_value;
-        }
-        p = (p >>> 1 | p << 31) >>> 0;
-        off++;
-      }
-    }
-  }
-  static VLine(dst, x, y, h, value, pattern) {
-    if (!dst)
-      return;
-    const stride = dst.stride;
-    const cols = dst.cols;
-    const rows = dst.rows;
-    const buf = dst.buffer;
-    if (x < 0 || x >= cols)
-      return;
-    const top = y < 0 ? 0 : y;
-    const bottom = y + h > rows ? rows : y + h;
-    if (top >= bottom)
-      return;
-    pattern = (pattern & 4294967295) >>> 0;
-    if (pattern === 4294967295) {
-      let offset = x + top * stride;
-      for (let row = top;row < bottom; row++) {
-        buf[offset] = value;
-        offset += stride;
-      }
-    } else {
-      let bg = 15728640 & value;
-      let fg = 983040 & value;
-      let off_value = bg >> 4 | fg << 4 | value & 4278255615;
-      let p = pattern;
-      let offset = x + top * stride;
-      for (let row = top;row < bottom; row++) {
-        if (p & 1) {
-          buf[offset] = value;
-        } else {
-          buf[offset] = off_value;
-        }
-        p = (p >>> 1 | p << 31) >>> 0;
-        offset += stride;
-      }
-    }
-  }
-  static Fill(dst, x, y, w, h, value, pattern) {
-    if (!dst)
-      return;
-    const stride = dst.stride;
-    const cols = dst.cols;
-    const rows = dst.rows;
-    const buf = dst.buffer;
-    const left = x < 0 ? 0 : x;
-    const right = x + w > cols ? cols : x + w;
-    const top = y < 0 ? 0 : y;
-    const bottom = y + h > rows ? rows : y + h;
-    if (left >= right || top >= bottom)
-      return;
-    pattern = (pattern & 4294967295) >>> 0;
-    const width = right - left;
-    let offset = left + top * stride;
-    if (pattern === 4294967295) {
-      for (let row = top;row < bottom; row++) {
-        buf.fill(value, offset, offset + width);
-        offset += stride;
-      }
-    } else {
-      let bg = 15728640 & value;
-      let fg = 983040 & value;
-      let off_value = bg >> 4 | fg << 4 | value & 4278255615;
-      const tmp = Bitmap32Utils._temp;
-      let p_even = pattern & 65535;
-      let p_odd = pattern >> 16 & 65535;
-      for (let i = 0;i < width; i++) {
-        if (p_even & 1) {
-          tmp[i] = value;
-        } else {
-          tmp[i] = off_value;
-        }
-        p_even = ((p_even >>> 1 | p_even << 15) & 65535) >>> 0;
-        if (p_odd & 1) {
-          tmp[i + width] = value;
-        } else {
-          tmp[i + width] = off_value;
-        }
-        p_odd = ((p_odd >>> 1 | p_odd << 15) & 65535) >>> 0;
-      }
-      const tmp_even = tmp.subarray(0, width);
-      const tmp_odd = tmp.subarray(width, width + width);
-      for (let row = top;row < bottom; row++) {
-        if (row & 1) {
-          buf.set(tmp_even, offset);
-        } else {
-          buf.set(tmp_odd, offset);
-        }
-        offset += stride;
-      }
-    }
-  }
-  static Border(dst, x, y, w, h, glyphs) {
-    if (!dst)
-      return;
-    if (glyphs.length != 9)
-      return;
-    if (w < 3 || h < 3)
-      return;
-    Bitmap32Utils.Set(dst, x, y, glyphs[0]);
-    Bitmap32Utils.Set(dst, x + w - 1, y, glyphs[2]);
-    Bitmap32Utils.Set(dst, x, y + h - 1, glyphs[6]);
-    Bitmap32Utils.Set(dst, x + w - 1, y + h - 1, glyphs[8]);
-    Bitmap32Utils.HLine(dst, x + 1, y, w - 2, glyphs[1]);
-    Bitmap32Utils.HLine(dst, x + 1, y + h - 1, w - 2, glyphs[7]);
-    Bitmap32Utils.VLine(dst, x, y + 1, h - 2, glyphs[3]);
-    Bitmap32Utils.VLine(dst, x + w - 1, y + 1, h - 2, glyphs[5]);
-    Bitmap32Utils.Fill(dst, x + 1, y + 1, w - 2, h - 2, glyphs[4]);
-  }
-  static Blit(dst, src, dstX, dstY, srcX, srcY, w, h) {
-    if (!dst || !src || dst == src)
-      return;
-    const srcStride = src.stride;
-    const srcCols = src.cols;
-    const srcRows = src.rows;
-    const srcBuf = src.buffer;
-    const dstStride = dst.stride;
-    const dstCols = dst.cols;
-    const dstRows = dst.rows;
-    const dstBuf = dst.buffer;
-    if (dstX < 0) {
-      srcX -= dstX;
-      w += dstX;
-      dstX = 0;
-    }
-    if (srcX < 0) {
-      dstX -= srcX;
-      w += srcX;
-      srcX = 0;
-    }
-    if (dstY < 0) {
-      srcY -= dstY;
-      h += dstY;
-      dstY = 0;
-    }
-    if (srcY < 0) {
-      dstY -= srcY;
-      h += srcY;
-      srcY = 0;
-    }
-    if (dstX + w > dstCols)
-      w = dstCols - dstX;
-    if (srcX + w > srcCols)
-      w = srcCols - srcX;
-    if (dstY + h > dstRows)
-      h = dstRows - dstY;
-    if (srcY + h > srcRows)
-      h = srcRows - srcY;
-    if (w <= 0 || h <= 0)
-      return;
-    if (dstX < 0 || dstY < 0 || srcX < 0 || srcY < 0)
-      return;
-    if (dstX + w > dstCols || dstY + h > dstRows)
-      return;
-    if (srcX + w > srcCols || srcY + h > srcRows)
-      return;
-    let srcOffset = srcX + srcY * srcStride;
-    let dstOffset = dstX + dstY * dstStride;
-    for (let row = 0;row < h; row++) {
-      dstBuf.set(srcBuf.subarray(srcOffset, srcOffset + w), dstOffset);
-      srcOffset += srcStride;
-      dstOffset += dstStride;
-    }
-  }
-  static CopyAlways(dst, left) {
-    if (!dst || !left)
-      return;
-    if (dst.maxSize != left.maxSize)
-      return;
-    const len = dst.maxSize;
-    const dstBuf = dst.buffer;
-    const leftBuf = left.buffer;
-    dstBuf.set(leftBuf, 0);
-  }
-  static CopyNewer(dst, left, right) {
-    if (!dst || !left || !right)
-      return;
-    if (left.maxSize != right.maxSize || dst.maxSize != left.maxSize)
-      return;
-    const len = dst.maxSize;
-    const dstBuf = dst.buffer;
-    const leftBuf = left.buffer;
-    const rightBuf = right.buffer;
-    for (let i = 0;i < len; i++) {
-      dstBuf[i] = leftBuf[i] | rightBuf[i];
-    }
-  }
-  static CopyMask(dst, left, right, mask) {
-    if (!dst || !left || !right || !mask)
-      return;
-    if (left.maxSize != right.maxSize || dst.maxSize != mask.maxSize || left.maxSize != mask.maxSize)
-      return;
-    const len = dst.maxSize;
-    const dstBuf = dst.buffer;
-    const leftBuf = left.buffer;
-    const rightBuf = right.buffer;
-    const maskBuf = mask.buffer;
-    for (let i = 0;i < len; i++) {
-      dstBuf[i] = leftBuf[i] & ~maskBuf[i] | rightBuf[i] & maskBuf[i];
-    }
-  }
-}
-
-// src/buffer/bitmap32.ts
-class Bitmap32 {
-  _cols;
-  _stride;
-  _rows;
-  maxSize;
-  buffer;
-  constructor(cols, rows, stride) {
-    this._cols = Math.max(cols, 1);
-    this._rows = Math.max(rows, 1);
-    this._stride = stride;
-    this.maxSize = this._rows * this._stride;
-    this.buffer = new Uint32Array(this.maxSize);
-    console.log("New Bitmap32", this._cols, this._rows, this._stride);
-  }
-  get rows() {
-    return this._rows;
-  }
-  get cols() {
-    return this._cols;
-  }
-  set cols(cols) {
-    this._cols = cols;
-  }
-  get stride() {
-    return this._stride;
-  }
-  set stride(stride) {
-    const size = this._rows * stride;
-    if (size > this.maxSize) {
-      throw `Buffer to large! New: ${size}, Existing: ${this.maxSize} ${stride}`;
-    }
-    this._stride = stride;
-  }
-}
-
-// src/buffer/plain-buffer.ts
-class PlainBuffer {
-  _glyphs;
-  _generation = 0;
-  _generationBits = 0;
-  _dirtyGeneration = 255;
-  constructor(cols, maxCols, rows) {
-    this._glyphs = new Bitmap32(cols, rows, maxCols);
-    this._glyphs.buffer.fill(0);
-  }
-  configure(metrics) {
-    if (this._glyphs.rows != metrics.rows || this._glyphs.cols != metrics.cols) {
-      this._glyphs.cols = Math.min(this._glyphs.stride, metrics.cols);
-    }
-  }
-  get generation() {
-    return this._generation;
-  }
-  set generation(generation) {
-    this._generation = generation >>> 0;
-    this._generationBits = generation << 24 >>> 0;
-    this._dirtyGeneration = 255;
-  }
-  get generationBits() {
-    return this._generationBits;
-  }
-  get glyphs() {
-    return this._glyphs;
-  }
-  get dirty() {
-    return this._generation === this._dirtyGeneration;
-  }
-  get cols() {
-    return this._glyphs.cols;
-  }
-  get rows() {
-    return this._glyphs.rows;
-  }
-  get stride() {
-    return this._glyphs.stride;
-  }
-  bumpGeneration() {
-    this._dirtyGeneration = this._generation;
-    this._generation++;
-    if (this._generation >= 255) {
-      this._generation = 1;
-    }
-    this._generationBits = this._generation << 24 >>> 0;
-  }
-  clear(char_attr) {
-    Bitmap32Utils.Clear(this._glyphs, char_attr & 16777215 | this._generationBits);
-    this._dirtyGeneration = this._generation;
-  }
-  set(x, y, char_attr) {
-    Bitmap32Utils.Set(this._glyphs, x, y, char_attr & 16777215 | this._generationBits);
-    this._dirtyGeneration = this._generation;
-  }
-  hline(x, y, w, char_attr, pattern) {
-    Bitmap32Utils.HLine(this._glyphs, x, y, w, char_attr & 16777215 | this._generationBits, pattern || 4294967295);
-    this._dirtyGeneration = this._generation;
-  }
-  vline(x, y, h, char_attr, pattern) {
-    Bitmap32Utils.VLine(this._glyphs, x, y, h, char_attr & 16777215 | this._generationBits, pattern || 4294967295);
-    this._dirtyGeneration = this._generation;
-  }
-  fill(x, y, w, h, char_attr, pattern) {
-    Bitmap32Utils.Fill(this._glyphs, x, y, w, h, char_attr & 16777215 | this._generationBits, pattern || 4294967295);
-    this._dirtyGeneration = this._generation;
-  }
-  print(x, y, text, char_attr) {
-    Bitmap32Utils.Print(this._glyphs, x, y, text, char_attr & 16711680 | this._generationBits);
-    this._dirtyGeneration = this._generation;
-  }
-  border(x, y, w, h, char_attrs) {
-    if (char_attrs && char_attrs.length === 9) {
-      const char_attrs_gen = new Array(9);
-      for (let i = 0;i < 9; i++) {
-        char_attrs_gen[i] = char_attrs[i] & 16777215 | this._generationBits;
-      }
-      Bitmap32Utils.Border(this._glyphs, x, y, w, h, char_attrs_gen);
-      this._dirtyGeneration = this._generation;
-    }
-  }
-  blit(x, y, src, sx, sy, sw, sh) {
-    this._dirtyGeneration = this._generation;
-  }
-}
-
 // src/metrics.ts
 var CHAR_ASPECT = 0.5;
 function calculateRendererMetrics(containerWidth, containerHeight, dpr, minCols, maxCols, rows) {
@@ -2249,6 +2256,7 @@ function calculateRendererMetrics(containerWidth, containerHeight, dpr, minCols,
   const containerTop = Math.floor((containerHeight - rendererHeight) / 2);
   return {
     cols,
+    maxCols,
     rows,
     cellWidth,
     cellHeight,
@@ -2280,17 +2288,17 @@ function mitt_default(n) {
 
 // src/unnamed.ts
 class Unnamed {
-  _renderer;
+  _view;
   _atlas;
   _palette = new Palette;
   _tickTimer = null;
   _resizeNeeded = false;
-  _buffer;
   _minCols;
   _maxCols;
   _rows;
   _metrics;
   _emitter = mitt_default();
+  _clearColour;
   constructor(config) {
     this.tick = this.tick.bind(this);
     this.onresize = this.onresize.bind(this);
@@ -2322,12 +2330,10 @@ class Unnamed {
     this._metrics = calculateRendererMetrics(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1, this._minCols, this._maxCols, this._rows);
     console.log(this._metrics.cols, this._metrics.rows, this._metrics.rendererWidth, this._metrics.rendererHeight);
     console.log("maxCols", this._maxCols);
-    this._buffer = new PlainBuffer(this._metrics.cols, this._maxCols, this._metrics.rows);
     this._atlas = new Atlas(this._palette);
     this._atlas.configure(this._metrics);
-    this._renderer = new BitmapRenderer(config.container, config.canvas, this._atlas, this._metrics);
-    this._renderer.clearColour = this.palette.getHexColour(0);
-    this._renderer.buffer = this._buffer;
+    this._view = new View(config.container, undefined, this._atlas, this._metrics);
+    this._view.clearColour = this.palette.getHexColour(0);
     this._tickTimer = setInterval(this.tick, 30);
     window.addEventListener("resize", this.onresize);
     window.addEventListener("keydown", this.onkeydown);
@@ -2347,7 +2353,7 @@ class Unnamed {
     return this._atlas;
   }
   get renderer() {
-    return this._renderer;
+    return this._view;
   }
   get cols() {
     return this._metrics.cols;
@@ -2356,7 +2362,7 @@ class Unnamed {
     return this._metrics.rows;
   }
   get buffer() {
-    return this._buffer;
+    return this._view.buffer;
   }
   onkeyup(e) {
     this._emitter.emit("keyup", {
@@ -2378,23 +2384,23 @@ class Unnamed {
     let newMetrics = calculateRendererMetrics(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1, this._minCols, this._maxCols, this._rows);
     if (this._metrics === undefined || newMetrics.cols != this._metrics.cols || newMetrics.rows != this._metrics.rows || newMetrics.cellWidth != this._metrics.cellWidth || newMetrics.cellHeight != this._metrics.cellHeight || newMetrics.containerLeft != this._metrics.containerLeft || newMetrics.containerTop != this._metrics.containerTop || newMetrics.rendererWidth != this._metrics.rendererWidth || newMetrics.rendererHeight != this._metrics.rendererHeight) {
       this._metrics = newMetrics;
-      this._renderer.configure(this._metrics, true);
+      this._view.configure(this._metrics, true);
       this._resizeNeeded = true;
     }
   }
   tick() {
     if (this._resizeNeeded) {
       this._resizeNeeded = false;
-      this._buffer.configure(this._metrics);
+      this.buffer.configure(this._metrics);
       this._atlas.configure(this._metrics);
-      this._renderer.configure(this._metrics);
+      this._view.configure(this._metrics);
       this._emitter.emit("resize", { cols: this.cols, rows: this.rows });
-      this._renderer.forceRender();
+      this._view.forceRender();
     }
-    if (this._renderer.willRender()) {
-      this._emitter.emit("render", this._buffer.generation);
-      this._renderer.render();
-      this._buffer.bumpGeneration();
+    if (this._view.willRender()) {
+      this._emitter.emit("render", this.buffer.generation);
+      this._view.render();
+      this.buffer.bumpGeneration();
     }
   }
   testPattern() {
@@ -2497,7 +2503,6 @@ class Unnamed {
 // demo.ts
 var un = new Unnamed({
   container: document.getElementById("container"),
-  canvas: document.getElementById("xcanvas"),
   maxCols: 120,
   rows: 40
 });

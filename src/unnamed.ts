@@ -1,5 +1,5 @@
 import { type Colour, Palette} from "./renderer/palette.ts";
-import { BitmapRenderer} from "./renderer/bitmap-renderer.ts";
+import { View} from "./renderer/view.ts";
 import { Atlas } from "./atlas/atlas.ts";
 
 import {PlainBuffer} from "./buffer/plain-buffer.ts";
@@ -28,7 +28,6 @@ export const DefaultPalette = [
 
 export type UnnamedConfig = {
     container: HTMLElement,
-    canvas: HTMLCanvasElement,
     minCols?: number,
     maxCols?: number,
     rows?: number,
@@ -71,17 +70,17 @@ type UnnamedEvents = {
 }
 
 export class Unnamed {
-    private _renderer:BitmapRenderer;
+    private _view:View;
     private _atlas:Atlas;
     private _palette = new Palette();
     private _tickTimer: ReturnType<typeof setInterval> | null = null;
     private _resizeNeeded: boolean = false;
-    private _buffer:PlainBuffer;
     private _minCols:number;
     private _maxCols:number;
     private _rows:number;
     private _metrics:RendererMetrics;
     private _emitter:Emitter<UnnamedEvents> = mitt<UnnamedEvents>();
+    private _clearColour:number|undefined;
 
     constructor(config:UnnamedConfig) {
 
@@ -128,17 +127,16 @@ export class Unnamed {
         console.log(this._metrics.cols, this._metrics.rows, this._metrics.rendererWidth, this._metrics.rendererHeight)
         console.log("maxCols", this._maxCols);
 
-        this._buffer = new PlainBuffer(this._metrics.cols, this._maxCols, this._metrics.rows);
         this._atlas = new Atlas(this._palette);
         this._atlas.configure(this._metrics);
 
-        this._renderer = new BitmapRenderer(
-            config.container, config.canvas, this._atlas, this._metrics
+        this._view = new View(
+            config.container,
+            undefined,
+            this._atlas,
+            this._metrics
         );
-        this._renderer.clearColour = this.palette.getHexColour(0);
-        this._renderer.buffer = this._buffer;
-
-        //this.testPattern();
+        this._view.clearColour = this.palette.getHexColour(0);
 
         this._tickTimer = setInterval(this.tick, 30);
         window.addEventListener("resize", this.onresize);
@@ -163,8 +161,8 @@ export class Unnamed {
         return this._atlas;
     }
 
-    get renderer():BitmapRenderer {
-        return this._renderer;
+    get renderer():View {
+        return this._view;
     }
 
     get cols():number {
@@ -175,8 +173,8 @@ export class Unnamed {
         return this._metrics.rows;
     }
 
-    get buffer():IBuffer {
-        return this._buffer;
+    get buffer():PlainBuffer {
+        return this._view.buffer;
     }
 
     onkeyup(e: KeyboardEvent) {
@@ -218,7 +216,7 @@ export class Unnamed {
             newMetrics.rendererHeight != this._metrics.rendererHeight)
         {
             this._metrics = newMetrics;
-            this._renderer.configure(this._metrics, true);
+            this._view.configure(this._metrics, true);
             this._resizeNeeded = true;
         }
     }
@@ -226,16 +224,16 @@ export class Unnamed {
     tick() {
         if (this._resizeNeeded) {
             this._resizeNeeded = false;
-            this._buffer.configure(this._metrics);
+            this.buffer.configure(this._metrics);
             this._atlas.configure(this._metrics);
-            this._renderer.configure(this._metrics);
+            this._view.configure(this._metrics);
             this._emitter.emit('resize', {cols: this.cols, rows: this.rows });
-            this._renderer.forceRender();
+            this._view.forceRender();
         }
-        if (this._renderer.willRender()) {
-            this._emitter.emit('render', this._buffer.generation);
-            this._renderer.render();
-            this._buffer.bumpGeneration();
+        if (this._view.willRender()) {
+            this._emitter.emit('render', this.buffer.generation);
+            this._view.render();
+            this.buffer.bumpGeneration();
         }
     }
 

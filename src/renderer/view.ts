@@ -1,29 +1,45 @@
 import { Atlas } from "./../atlas/atlas.ts";
 import { AtlasSheet } from "./../atlas/atlas-sheet.ts";
 import { PlainBuffer } from "../buffer/plain-buffer.ts";
-import {RendererUtils} from "./renderer-utils.ts";
+import {ViewTools} from "./view-tools.ts";
 import type {RendererMetrics} from "../metrics.ts";
+import type {Bitmap32} from "../buffer/bitmap32.ts";
 
-export class BitmapRenderer {
+export class View {
     private _container: HTMLElement;
     private _canvas: HTMLCanvasElement;
     private _ctx: CanvasRenderingContext2D;
     private _atlas:Atlas;
-    private _cols:number = 0;
-    private _rows:number = 0;
-    private _dpr:number = 1;
-    private _cellW:number = 0;
-    private _cellH:number = 0;
-    private _viewW:number = 0;
-    private _viewH:number = 0;
+    private _metrics:RendererMetrics;
     private _forceRender:boolean = false;
-    private _rendererBuffer:PlainBuffer|null = null;
+    private _buffer:PlainBuffer;
     private _clearColour:string = '#000000'
 
-    constructor(container:HTMLElement, canvas:HTMLCanvasElement, atlas:Atlas, metrics:RendererMetrics) {
+    constructor(container:HTMLElement, canvas:HTMLCanvasElement|undefined, atlas:Atlas, metrics:RendererMetrics, buffer?:PlainBuffer|undefined, zIndex?:number) {
         this._container = container;
-        this._canvas = canvas;
-        this._ctx = canvas.getContext("2d")!;
+
+        if (canvas === undefined) {
+            this._canvas = document.createElement('canvas');
+            this._canvas.style.left = '0';
+            this._canvas.style.top = '0';
+            this._canvas.style.pointerEvents = 'none';
+            this._canvas.style.zIndex = `${zIndex || 0}`;
+            this._container.appendChild(this._canvas);
+        }
+        else {
+            this._canvas = canvas;
+        }
+
+        this._ctx = this._canvas.getContext("2d")!;
+
+        if (buffer === undefined) {
+            this._buffer = new PlainBuffer(metrics.cols, metrics.maxCols, metrics.rows);
+        }
+        else {
+            this._buffer = buffer;
+        }
+
+        this._metrics = { ...metrics };
         this._atlas = atlas;
     }
 
@@ -44,14 +60,7 @@ export class BitmapRenderer {
         this._canvas.height = metrics.rendererHeight * metrics.dpr;
         this._ctx.setTransform(metrics.dpr, 0,0, metrics.dpr, 0,0);
 
-
-        this._rows = metrics.rows;
-        this._cols = metrics.cols;
-        this._cellW = metrics.cellWidth;
-        this._cellH = metrics.cellHeight;
-        this._viewW = metrics.rendererWidth;
-        this._viewH = metrics.rendererHeight;
-        this._dpr = metrics.dpr;
+        this._metrics = { ... metrics };
 
         this._forceRender = true;
     }
@@ -60,14 +69,15 @@ export class BitmapRenderer {
 
         const entry = this._atlas.get(char_attr);
         const sheet = this._atlas.getSheet(entry.sheet)!;
+        const M = this._metrics;
 
-        const scaledW = this._cellW * this._dpr;
-        const scaledH = this._cellH * this._dpr;
+        const scaledW = M.cellWidth * M.dpr;
+        const scaledH = M.cellHeight * M.dpr;
 
         this._ctx.drawImage(
             sheet.canvas,
             entry.x, entry.y, scaledW , scaledH,
-            x, y, this._cellW, this._cellH
+            x, y, M.cellWidth, M.cellHeight
         );
     }
 
@@ -83,43 +93,46 @@ export class BitmapRenderer {
         return this._canvas.height;
     }
 
+    get metrics():RendererMetrics {
+        return this._metrics;
+    }
+
     get cols() {
-        return this._cols;
+        return this._metrics.cols;
     }
 
     get rows() {
-        return this._rows;
+        return this._metrics.rows;
     }
 
     get cellW():number {
-        return this._cellW;
+        return this._metrics.cellWidth;
     }
 
     get cellH():number {
-        return this._cellH;
+        return this._metrics.cellHeight;
     }
 
     get dpr():number {
-        return this._dpr;
+        return this._metrics.dpr;
     }
 
     get buffer() {
-        return this._rendererBuffer;
+        return this._buffer;
     }
 
     set clearColour(clearColour:string) {
         this._clearColour = clearColour;
-        document.body.style.backgroundColor = clearColour;
     }
 
-    set buffer(buffer:PlainBuffer|null) {
-        this._rendererBuffer = buffer;
+    set buffer(buffer:PlainBuffer) {
+        this._buffer = buffer;
         this._forceRender = true;
     }
 
     renderFromBuffer(buffer:PlainBuffer, force:boolean = false) {
 
-        if (this._rows == 0 || this._cols == 0) {
+        if (this.rows == 0 || this.cols == 0) {
             this._ctx.fillStyle = 'darkred';
             this._ctx.fillRect(0, 0, 1024, 1024);
             return;
@@ -134,11 +147,11 @@ export class BitmapRenderer {
             this._ctx.fillStyle = this._clearColour;
             this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
 
-            RendererUtils.RenderCopy(this._ctx, this, buffer, this._atlas);
+            ViewTools.RenderCopy(this._ctx, this, buffer, this._atlas);
         }
         else {
             if (buffer.dirty) {
-                RendererUtils.RenderCopyTested(this._ctx, this, buffer, this._atlas);
+                ViewTools.RenderCopyTested(this._ctx, this, buffer, this._atlas);
             }
         }
 
@@ -146,11 +159,11 @@ export class BitmapRenderer {
 
     willRender():boolean {
 
-        if (this._cellW === 0 || this._cellH === 0) {
+        if (this.cellW === 0 || this.cellH === 0) {
             return false;
         }
 
-        if (this._forceRender || (this._rendererBuffer != null && this._rendererBuffer.dirty)) {
+        if (this._forceRender || (this._buffer != null && this._buffer.dirty)) {
             return true;
         }
 
@@ -159,24 +172,25 @@ export class BitmapRenderer {
 
     render() {
 
-        if (this._cellW === 0 || this._cellH === 0) {
-            return;
+        if (this.cellW === 0 || this.cellH === 0) {
+            return false;
         }
 
-        if (this._forceRender || (this._rendererBuffer != null && this._rendererBuffer.dirty)) {
+        if (this._forceRender || (this._buffer != null && this._buffer.dirty)) {
 
-            if (this._rendererBuffer != null) {
-                this.renderFromBuffer(this._rendererBuffer, this._forceRender);
+            if (this._buffer != null) {
+                this.renderFromBuffer(this._buffer, this._forceRender);
             }
             else {
                 const str = '<Empty Buffer>';
+                const M = this._metrics;
                 let x = 0, y = 0;
 
                 for (let i = 0; i < str.length; i++) {
                     const char = str.charCodeAt(i);
                     let attr = (15 | (i << 4)) << 16
                     this.renderGlyphAtXY(char | attr, x, y);
-                    x += this._cellW;
+                    x += M.cellWidth;
                 }
             }
 

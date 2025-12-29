@@ -1,12 +1,12 @@
-import { BitmapRenderer } from "./bitmap-renderer.ts";
+import { View } from "./view.ts";
 import { PlainBuffer } from '../buffer/plain-buffer.ts'
 import { Atlas } from "./../atlas/atlas.ts";
 
-export class RendererUtils {
+export class ViewTools {
 
     static RenderCopy(
         dst:CanvasRenderingContext2D,
-        renderer:BitmapRenderer,
+        renderer:View,
         buffer:PlainBuffer,
         atlas:Atlas):void {
 
@@ -50,7 +50,7 @@ export class RendererUtils {
 
     static RenderCopyTested(
         dst:CanvasRenderingContext2D,
-        renderer:BitmapRenderer,
+        renderer:View,
         buffer:PlainBuffer,
         atlas:Atlas):void {
 
