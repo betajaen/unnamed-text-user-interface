@@ -1,6 +1,7 @@
 import {Unnamed} from "./src/unnamed.ts";
 
 const un = new Unnamed({
+  container: document.getElementById("container") as HTMLElement,
   canvas: document.getElementById("xcanvas") as HTMLCanvasElement,
   maxCols: 120,
   rows: 40

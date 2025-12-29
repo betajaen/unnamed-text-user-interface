@@ -6,6 +6,8 @@ export type RendererMetrics = {
     rows: number;
     cellWidth: number;
     cellHeight: number;
+    containerLeft: number;
+    containerTop: number;
     rendererWidth: number;
     rendererHeight: number;
     dpr:number;
@@ -32,13 +34,21 @@ export function calculateRendererMetrics(
         cols = maxCols;
     }
 
+    const rendererWidth = Math.floor(cellWidth * cols);
+    const rendererHeight = Math.floor(cellHeight * rows);
+
+    const containerLeft = Math.floor((containerWidth  - rendererWidth) / 2);
+    const containerTop = Math.floor((containerHeight  - rendererHeight) / 2);
+
     return {
         cols: cols,
         rows: rows,
         cellWidth: cellWidth,
         cellHeight: cellHeight,
-        rendererWidth: cellWidth * cols,
-        rendererHeight: cellHeight * rows,
+        containerLeft: containerLeft,
+        containerTop: containerTop,
+        rendererWidth: rendererWidth,
+        rendererHeight: rendererHeight,
         dpr: dpr
     };
 }

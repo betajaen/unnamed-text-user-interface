@@ -5,6 +5,7 @@ import {RendererUtils} from "./renderer-utils.ts";
 import type {RendererMetrics} from "../metrics.ts";
 
 export class Renderer {
+    private _container: HTMLElement;
     private _canvas: HTMLCanvasElement;
     private _ctx: CanvasRenderingContext2D;
     private _atlas:Atlas;
@@ -19,13 +20,31 @@ export class Renderer {
     private _rendererBuffer:PlainBuffer|null = null;
     private _clearColour:string = '#000000'
 
-    constructor(canvas:HTMLCanvasElement, atlas:Atlas, metrics:RendererMetrics) {
+    constructor(container:HTMLElement, canvas:HTMLCanvasElement, atlas:Atlas, metrics:RendererMetrics) {
+        this._container = container;
         this._canvas = canvas;
         this._ctx = canvas.getContext("2d")!;
         this._atlas = atlas;
     }
 
-    configure(metrics:RendererMetrics):void {
+    configure(metrics:RendererMetrics, containerOnly?:boolean):void {
+
+        this._container.style.left = metrics.containerLeft + 'px';
+        this._container.style.top = metrics.containerTop + 'px';
+
+        if (containerOnly) {
+            return;
+        }
+
+        this._container.style.width = metrics.rendererWidth + 'px';
+        this._container.style.height = metrics.rendererHeight + 'px';
+        this._canvas.style.width = metrics.rendererWidth  + 'px';
+        this._canvas.style.height = metrics.rendererHeight + 'px';
+        this._canvas.width = metrics.rendererWidth * metrics.dpr;
+        this._canvas.height = metrics.rendererHeight * metrics.dpr;
+        this._ctx.setTransform(metrics.dpr, 0,0, metrics.dpr, 0,0);
+
+
         this._rows = metrics.rows;
         this._cols = metrics.cols;
         this._cellW = metrics.cellWidth;
@@ -34,12 +53,6 @@ export class Renderer {
         this._viewH = metrics.rendererHeight;
         this._dpr = metrics.dpr;
 
-        this._canvas.width = this._viewW * this._dpr;
-        this._canvas.height = this._viewH * this._dpr;
-        this._canvas.style.width = this._viewW + 'px';
-        this._canvas.style.height = this._viewH + 'px';
-
-        this._ctx.setTransform(this._dpr, 0,0, this._dpr, 0,0);
         this._forceRender = true;
     }
 

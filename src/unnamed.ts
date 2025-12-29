@@ -27,6 +27,7 @@ export const DefaultPalette = [
 ];
 
 export type UnnamedConfig = {
+    container: HTMLElement,
     canvas: HTMLCanvasElement,
     minCols?: number,
     maxCols?: number,
@@ -46,11 +47,26 @@ type KeyEvent = {
     meta: boolean;
 }
 
+type ClickTapEvent = {
+    col: number;
+    row: number;
+}
+
+type ScrollEvent = {
+    col: number;
+    row: number;
+    horz: number;
+    vert: number;
+}
+
 type UnnamedEvents = {
     resize: ResizeEvent;
     render: number;
     keydown: KeyEvent;
     keyup: KeyEvent;
+    click: ClickTapEvent;
+    tap: ClickTapEvent;
+    scroll: ScrollEvent;
     error: Error;
 }
 
@@ -73,6 +89,8 @@ export class Unnamed {
         this.onresize = this.onresize.bind(this);
         this.onkeydown = this.onkeydown.bind(this);
         this.onkeyup = this.onkeyup.bind(this);
+        //this.onclick = this.onclick.bind(this);
+
 
         if (config.palette === undefined) {
             this.palette.set(0, 0x1f, 0x0e, 0x1c);  // 0  - Near black (dark purple)
@@ -115,7 +133,7 @@ export class Unnamed {
         this._atlas.configure(this._metrics);
 
         this._renderer = new Renderer(
-            config.canvas, this._atlas, this._metrics
+            config.container, config.canvas, this._atlas, this._metrics
         );
         this._renderer.clearColour = this.palette.getHexColour(0);
         this._renderer.buffer = this._buffer;
@@ -194,13 +212,14 @@ export class Unnamed {
             newMetrics.rows != this._metrics.rows ||
             newMetrics.cellWidth != this._metrics.cellWidth ||
             newMetrics.cellHeight != this._metrics.cellHeight ||
+            newMetrics.containerLeft != this._metrics.containerLeft ||
+            newMetrics.containerTop != this._metrics.containerTop ||
             newMetrics.rendererWidth != this._metrics.rendererWidth ||
             newMetrics.rendererHeight != this._metrics.rendererHeight)
         {
             this._metrics = newMetrics;
+            this._renderer.configure(this._metrics, true);
             this._resizeNeeded = true;
-
-            console.log(this._metrics.cols, this._metrics.rows, this._metrics.rendererWidth, this._metrics.rendererHeight)
         }
     }
 

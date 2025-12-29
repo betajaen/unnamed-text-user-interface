@@ -11,16 +11,28 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
+      background-color: chocolate;
     }
 
-    body {
-      display: flex;
-      justify-content: center;
-      align-items: center;
+    #container {
+      position: absolute;
+      /* left, top, width, height set by JS */
     }
 
-    canvas {
+    #container canvas {
+      position: absolute;
+      left: 0;
+      top: 0;
       display: block;
+    }
+
+    #cursor {
+      position: absolute;
+      left: 0;
+      top: 0;
+      pointer-events: none;
+      /* width/height set to cellWidth/cellHeight by JS */
+      /* moved via transform: translate(x, y) */
     }
     div#xstatus {
       height: 0.25em;
@@ -35,8 +47,10 @@
   </style>
 </head>
 <body>
-<div id="xstatus"></div><br/>
-  <canvas id="xcanvas"></canvas>
+  <div id="xstatus"></div>
+  <div id="container">
+    <canvas id="xcanvas"></canvas>
+  </div>
   <script src="/demo.js"></script>
   <script>
     let ws = null;
