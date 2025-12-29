@@ -1525,18 +1525,18 @@ class PlainBuffer {
 
 // src/renderer/view-tools.ts
 class ViewTools {
-  static RenderCopy(dst, renderer, buffer, atlas) {
-    if (renderer === undefined || buffer === undefined || dst === undefined || atlas === undefined) {
+  static Copy(dst, buffer, atlas, metrics) {
+    if (buffer === undefined || dst === undefined || atlas === undefined || metrics === undefined) {
       return;
     }
     let x = 0, y = 0, idx = 0, tidx = 0, cols = 0, stride = buffer.stride, rows = buffer.rows;
     let srcSheetNum = -1;
     let srcSheet;
     const buf = buffer.glyphs.buffer;
-    const cellW = renderer.cellW;
-    const cellH = renderer.cellH;
-    const scaledW = cellW * renderer.dpr;
-    const scaledH = cellH * renderer.dpr;
+    const cellW = metrics.cellWidth;
+    const cellH = metrics.cellHeight;
+    const scaledW = cellW * metrics.dpr;
+    const scaledH = cellH * metrics.dpr;
     while (rows--) {
       tidx = idx;
       cols = buffer.cols;
@@ -1557,8 +1557,8 @@ class ViewTools {
       idx = tidx + stride;
     }
   }
-  static RenderCopyTested(dst, renderer, buffer, atlas) {
-    if (renderer === undefined || buffer === undefined || dst === undefined || atlas === undefined) {
+  static CopyTested(dst, buffer, atlas, metrics) {
+    if (buffer === undefined || dst === undefined || atlas === undefined || metrics === undefined) {
       return;
     }
     let x = 0, y = 0, idx = 0, tidx = 0, cols = 0, stride = buffer.stride, rows = buffer.rows;
@@ -1566,10 +1566,10 @@ class ViewTools {
     let srcSheet;
     const buf = buffer.glyphs.buffer;
     const genBits = buffer.generationBits;
-    const cellW = renderer.cellW;
-    const cellH = renderer.cellH;
-    const scaledW = cellW * renderer.dpr;
-    const scaledH = cellH * renderer.dpr;
+    const cellW = metrics.cellWidth;
+    const cellH = metrics.cellHeight;
+    const scaledW = cellW * metrics.dpr;
+    const scaledH = cellH * metrics.dpr;
     while (rows--) {
       tidx = idx;
       cols = buffer.cols;
@@ -1643,14 +1643,6 @@ class View {
     this._metrics = { ...metrics };
     this._forceRender = true;
   }
-  renderGlyphAtXY(char_attr, x, y) {
-    const entry = this._atlas.get(char_attr);
-    const sheet = this._atlas.getSheet(entry.sheet);
-    const M = this._metrics;
-    const scaledW = M.cellWidth * M.dpr;
-    const scaledH = M.cellHeight * M.dpr;
-    this._ctx.drawImage(sheet.canvas, entry.x, entry.y, scaledW, scaledH, x, y, M.cellWidth, M.cellHeight);
-  }
   forceRender() {
     this._forceRender = true;
   }
@@ -1688,54 +1680,32 @@ class View {
     this._buffer = buffer;
     this._forceRender = true;
   }
-  renderFromBuffer(buffer, force = false) {
-    if (this.rows == 0 || this.cols == 0) {
-      this._ctx.fillStyle = "darkred";
-      this._ctx.fillRect(0, 0, 1024, 1024);
-      return;
-    }
-    if (force == false && buffer.dirty == false) {
-      return;
-    }
-    if (force) {
-      this._ctx.fillStyle = this._clearColour;
-      this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
-      ViewTools.RenderCopy(this._ctx, this, buffer, this._atlas);
-    } else {
-      if (buffer.dirty) {
-        ViewTools.RenderCopyTested(this._ctx, this, buffer, this._atlas);
-      }
-    }
-  }
   willRender() {
-    if (this.cellW === 0 || this.cellH === 0) {
+    if (this.cellW === 0)
       return false;
-    }
-    if (this._forceRender || this._buffer != null && this._buffer.dirty) {
-      return true;
-    }
-    return false;
+    if (this.cellH === 0)
+      return false;
+    if (this._forceRender == false)
+      return false;
+    if (this._buffer === null)
+      return false;
+    if (this._buffer.dirty === false)
+      return false;
+    return true;
   }
   render() {
-    if (this.cellW === 0 || this.cellH === 0) {
-      return false;
-    }
-    if (this._forceRender || this._buffer != null && this._buffer.dirty) {
-      if (this._buffer != null) {
-        this.renderFromBuffer(this._buffer, this._forceRender);
-      } else {
-        const str = "<Empty Buffer>";
-        const M = this._metrics;
-        let x = 0, y = 0;
-        for (let i = 0;i < str.length; i++) {
-          const char = str.charCodeAt(i);
-          let attr = (15 | i << 4) << 16;
-          this.renderGlyphAtXY(char | attr, x, y);
-          x += M.cellWidth;
-        }
+    if (this.willRender() == false)
+      return;
+    if (this._forceRender) {
+      this._ctx.fillStyle = this._clearColour;
+      this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
+      ViewTools.Copy(this._ctx, this._buffer, this._atlas, this._metrics);
+    } else {
+      if (this._buffer.dirty) {
+        ViewTools.CopyTested(this._ctx, this._buffer, this._atlas, this._metrics);
       }
-      this._forceRender = false;
     }
+    this._forceRender = false;
   }
 }
 
@@ -2328,12 +2298,11 @@ class Unnamed {
     this._maxCols = Math.max(40, config.maxCols || 80);
     this._minCols = Math.max(20, config.minCols || 20);
     this._metrics = calculateRendererMetrics(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1, this._minCols, this._maxCols, this._rows);
-    console.log(this._metrics.cols, this._metrics.rows, this._metrics.rendererWidth, this._metrics.rendererHeight);
-    console.log("maxCols", this._maxCols);
     this._atlas = new Atlas(this._palette);
     this._atlas.configure(this._metrics);
     this._view = new View(config.container, undefined, this._atlas, this._metrics);
     this._view.clearColour = this.palette.getHexColour(0);
+    document.body.style.background = this.palette.getHexColour(0);
     this._tickTimer = setInterval(this.tick, 30);
     window.addEventListener("resize", this.onresize);
     window.addEventListener("keydown", this.onkeydown);
@@ -2404,27 +2373,28 @@ class Unnamed {
     }
   }
   testPattern() {
-    this._buffer.clear(0);
+    const buf = this.buffer;
+    buf.clear(0);
     let i = 1;
-    this._buffer.print(0, 0, ">", 4128768);
-    this._buffer.print(0, 1, ">", 4128768);
+    buf.print(0, 0, ">", 4128768);
+    buf.print(0, 1, ">", 4128768);
     for (;i < this.cols - 1; i++) {
       let num = i.toString();
       if (num.length > 1) {
-        this._buffer.print(i, 0, num[0], 4128768);
-        this._buffer.print(i, 1, num[1], 4128768);
+        buf.print(i, 0, num[0], 4128768);
+        buf.print(i, 1, num[1], 4128768);
       } else {
-        this._buffer.print(i, 0, "0", 4128768);
-        this._buffer.print(i, 1, num[0], 4128768);
+        buf.print(i, 0, "0", 4128768);
+        buf.print(i, 1, num[0], 4128768);
       }
     }
-    this._buffer.print(i, 0, "<", 4128768);
-    this._buffer.print(i, 1, "<", 4128768);
-    this._buffer.print(2, 3, "[]MWgy#£!|", 4128768);
+    buf.print(i, 0, "<", 4128768);
+    buf.print(i, 1, "<", 4128768);
+    buf.print(2, 3, "[]MWgy#£!|", 4128768);
     i = 0;
     let k = 2, j = 5;
     for (;i < 32; i++) {
-      this._buffer.print(k, j, String.fromCharCode(i), 4128768);
+      buf.print(k, j, String.fromCharCode(i), 4128768);
       k += 2;
       if (k == 10) {
         k = 2;
@@ -2447,13 +2417,13 @@ class Unnamed {
       "Héllo 世界 \uD83C\uDDEC\uD83C\uDDE7 Привет \uD83D\uDC68‍\uD83D\uDC69‍\uD83D\uDC67"
     ];
     for (i = 0;i < 16; i++) {
-      this._buffer.print(15 + i * 3, 2, "   ", i << 20);
-      this._buffer.print(15 + i * 3, 3, i.toString().padStart(3, " "), i << 16);
+      buf.print(15 + i * 3, 2, "   ", i << 20);
+      buf.print(15 + i * 3, 3, i.toString().padStart(3, " "), i << 16);
     }
     for (i = 0;i < textStrings.length; i++) {
-      this._buffer.print(2, 4 + i, textStrings[i], (i + 2 << 4 | 15) << 16);
+      buf.print(2, 4 + i, textStrings[i], (i + 2 << 4 | 15) << 16);
     }
-    this._buffer.border(9, 18, 30, 10, [
+    buf.border(9, 18, 30, 10, [
       19 | 983040,
       6 | 983040,
       20 | 196608,
@@ -2464,7 +2434,7 @@ class Unnamed {
       4 | 196608,
       22 | 196608
     ]);
-    this._buffer.border(9, 28, 30, 10, [
+    buf.border(9, 28, 30, 10, [
       19 | 983040,
       6 | 983040,
       20 | 983040,
@@ -2475,7 +2445,7 @@ class Unnamed {
       23 | 983040,
       24 | 983040
     ]);
-    this._buffer.border(40, 18, 30, 10, [
+    buf.border(40, 18, 30, 10, [
       19 | 524288,
       6 | 524288,
       20 | 524288,
@@ -2486,7 +2456,7 @@ class Unnamed {
       23 | 524288,
       24 | 524288
     ]);
-    this._buffer.border(40, 28, 30, 10, [
+    buf.border(40, 28, 30, 10, [
       15 | 327680,
       5 | 327680,
       16 | 327680,

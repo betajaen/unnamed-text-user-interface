@@ -124,8 +124,6 @@ export class Unnamed {
             this._maxCols,
             this._rows
         );
-        console.log(this._metrics.cols, this._metrics.rows, this._metrics.rendererWidth, this._metrics.rendererHeight)
-        console.log("maxCols", this._maxCols);
 
         this._atlas = new Atlas(this._palette);
         this._atlas.configure(this._metrics);
@@ -136,7 +134,9 @@ export class Unnamed {
             this._atlas,
             this._metrics
         );
+
         this._view.clearColour = this.palette.getHexColour(0);
+        document.body.style.background = this.palette.getHexColour(0);
 
         this._tickTimer = setInterval(this.tick, 30);
         window.addEventListener("resize", this.onresize);
@@ -239,28 +239,30 @@ export class Unnamed {
 
     testPattern() {
 
-        this._buffer.clear(0);
+        const buf = this.buffer;
+
+        buf.clear(0);
         let i=1;
-        this._buffer.print(0, 0, ">", 0x003F0000);
-        this._buffer.print(0, 1, ">", 0x003F0000);
+        buf.print(0, 0, ">", 0x003F0000);
+        buf.print(0, 1, ">", 0x003F0000);
         for(;i < this.cols-1;i++) {
             let num = i.toString();
             if (num.length > 1) {
-                this._buffer.print(i, 0, num[0]!, 0x003F0000);
-                this._buffer.print(i, 1, num[1]!, 0x003F0000);
+                buf.print(i, 0, num[0]!, 0x003F0000);
+                buf.print(i, 1, num[1]!, 0x003F0000);
             }
             else{
-                this._buffer.print(i, 0, "0", 0x003F0000);
-                this._buffer.print(i, 1, num[0]!, 0x003F0000);
+                buf.print(i, 0, "0", 0x003F0000);
+                buf.print(i, 1, num[0]!, 0x003F0000);
             }
         }
-        this._buffer.print(i, 0, "<", 0x003F0000);
-        this._buffer.print(i, 1, "<", 0x003F0000);
-        this._buffer.print(2, 3, "[]MWgy#£!|", 0x003F0000);
+        buf.print(i, 0, "<", 0x003F0000);
+        buf.print(i, 1, "<", 0x003F0000);
+        buf.print(2, 3, "[]MWgy#£!|", 0x003F0000);
         i = 0;
         let k = 2, j = 5;
         for(;i < 32;i++) {
-            this._buffer.print(k, j, String.fromCharCode(i), 0x003F0000);
+            buf.print(k, j, String.fromCharCode(i), 0x003F0000);
             k+=2;
             if (k == 10) {
                 k = 2;
@@ -309,15 +311,15 @@ export class Unnamed {
         ];
 
         for(i=0;i < 16;i++) {
-            this._buffer.print(15+i*3, 2, '   ', i << 20);
-            this._buffer.print(15+i*3, 3, i.toString().padStart(3, ' ') , (i) << 16);
+            buf.print(15+i*3, 2, '   ', i << 20);
+            buf.print(15+i*3, 3, i.toString().padStart(3, ' ') , (i) << 16);
         }
 
         for(i=0;i < textStrings.length;i++) {
-            this._buffer.print(2, 4+i, textStrings[i]!,( (i +2) << 4 | 0xF) << 16);
+            buf.print(2, 4+i, textStrings[i]!,( (i +2) << 4 | 0xF) << 16);
         }
 
-        this._buffer.border(9, 18, 30, 10,
+        buf.border(9, 18, 30, 10,
             [
                 19 | 0x000F0000,
                 6 | 0x000F0000,
@@ -333,7 +335,7 @@ export class Unnamed {
             ])
 
 
-        this._buffer.border(9, 28, 30, 10,
+        buf.border(9, 28, 30, 10,
             [
                 19 | 0x000F0000,
                 6 | 0x000F0000,
@@ -348,7 +350,7 @@ export class Unnamed {
                 24 | 0x000F0000,
             ])
 
-        this._buffer.border(40, 18, 30, 10,
+        buf.border(40, 18, 30, 10,
             [
                 19 | 0x00080000,
                 6 | 0x00080000,
@@ -363,7 +365,7 @@ export class Unnamed {
                 24 | 0x00080000,
             ])
 
-        this._buffer.border(40, 28, 30, 10,
+        buf.border(40, 28, 30, 10,
             [
                 15 | 0x00050000,
                 5 | 0x00050000,

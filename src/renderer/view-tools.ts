@@ -1,16 +1,17 @@
 import { View } from "./view.ts";
 import { PlainBuffer } from '../buffer/plain-buffer.ts'
 import { Atlas } from "./../atlas/atlas.ts";
+import type {RendererMetrics} from "../metrics.ts";
 
 export class ViewTools {
 
-    static RenderCopy(
+    static Copy(
         dst:CanvasRenderingContext2D,
-        renderer:View,
         buffer:PlainBuffer,
-        atlas:Atlas):void {
+        atlas:Atlas,
+        metrics:RendererMetrics):void {
 
-        if (renderer === undefined || buffer === undefined || dst === undefined || atlas === undefined) {
+        if (buffer === undefined || dst === undefined || atlas === undefined || metrics === undefined) {
             return;
         }
 
@@ -19,10 +20,10 @@ export class ViewTools {
         let srcSheet:HTMLCanvasElement;
         const buf = buffer.glyphs.buffer;
 
-        const cellW = renderer.cellW;
-        const cellH = renderer.cellH;
-        const scaledW = cellW * renderer.dpr;
-        const scaledH = cellH * renderer.dpr;
+        const cellW = metrics.cellWidth;
+        const cellH = metrics.cellHeight;
+        const scaledW = cellW * metrics.dpr;
+        const scaledH = cellH * metrics.dpr;
 
         while (rows--) {
             tidx = idx;
@@ -48,13 +49,13 @@ export class ViewTools {
 
     }
 
-    static RenderCopyTested(
+    static CopyTested(
         dst:CanvasRenderingContext2D,
-        renderer:View,
         buffer:PlainBuffer,
-        atlas:Atlas):void {
+        atlas:Atlas,
+        metrics:RendererMetrics):void {
 
-        if (renderer === undefined || buffer === undefined || dst === undefined || atlas === undefined) {
+        if (buffer === undefined || dst === undefined || atlas === undefined || metrics === undefined) {
             return;
         }
 
@@ -64,10 +65,10 @@ export class ViewTools {
         const buf = buffer.glyphs.buffer;
         const genBits = buffer.generationBits;
 
-        const cellW = renderer.cellW;
-        const cellH = renderer.cellH;
-        const scaledW = cellW * renderer.dpr;
-        const scaledH = cellH * renderer.dpr;
+        const cellW = metrics.cellWidth;
+        const cellH = metrics.cellHeight;
+        const scaledW = cellW * metrics.dpr;
+        const scaledH = cellH * metrics.dpr;
 
         while (rows--) {
             tidx = idx;

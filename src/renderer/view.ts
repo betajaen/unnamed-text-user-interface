@@ -65,22 +65,6 @@ export class View {
         this._forceRender = true;
     }
 
-    renderGlyphAtXY(char_attr:number, x:number, y:number) {
-
-        const entry = this._atlas.get(char_attr);
-        const sheet = this._atlas.getSheet(entry.sheet)!;
-        const M = this._metrics;
-
-        const scaledW = M.cellWidth * M.dpr;
-        const scaledH = M.cellHeight * M.dpr;
-
-        this._ctx.drawImage(
-            sheet.canvas,
-            entry.x, entry.y, scaledW , scaledH,
-            x, y, M.cellWidth, M.cellHeight
-        );
-    }
-
     forceRender() {
         this._forceRender = true;
     }
@@ -130,72 +114,44 @@ export class View {
         this._forceRender = true;
     }
 
-    renderFromBuffer(buffer:PlainBuffer, force:boolean = false) {
-
-        if (this.rows == 0 || this.cols == 0) {
-            this._ctx.fillStyle = 'darkred';
-            this._ctx.fillRect(0, 0, 1024, 1024);
-            return;
-        }
-
-        if (force == false && buffer.dirty == false) {
-            return;
-        }
-
-        if (force) {
-
-            this._ctx.fillStyle = this._clearColour;
-            this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
-
-            ViewTools.RenderCopy(this._ctx, this, buffer, this._atlas);
-        }
-        else {
-            if (buffer.dirty) {
-                ViewTools.RenderCopyTested(this._ctx, this, buffer, this._atlas);
-            }
-        }
-
-    }
-
     willRender():boolean {
 
-        if (this.cellW === 0 || this.cellH === 0) {
+        if (this.cellW === 0)
             return false;
-        }
 
-        if (this._forceRender || (this._buffer != null && this._buffer.dirty)) {
-            return true;
-        }
+        if (this.cellH === 0)
+            return false;
 
-        return false;
+        if (this._forceRender == false)
+            return false;
+
+        if (this._buffer === null)
+            return false;
+
+        if (this._buffer.dirty === false)
+            return false;
+
+        return true;
     }
 
     render() {
 
-        if (this.cellW === 0 || this.cellH === 0) {
-            return false;
+        if (this.willRender() == false)
+            return;
+
+        if (this._forceRender) {
+            this._ctx.fillStyle = this._clearColour;
+            this._ctx.fillRect(0, 0, this._canvas.width, this._canvas.height);
+            ViewTools.Copy(this._ctx, this._buffer, this._atlas, this._metrics);
+        }
+        else {
+            if (this._buffer.dirty) {
+                ViewTools.CopyTested(this._ctx, this._buffer, this._atlas, this._metrics);
+            }
         }
 
-        if (this._forceRender || (this._buffer != null && this._buffer.dirty)) {
-
-            if (this._buffer != null) {
-                this.renderFromBuffer(this._buffer, this._forceRender);
-            }
-            else {
-                const str = '<Empty Buffer>';
-                const M = this._metrics;
-                let x = 0, y = 0;
-
-                for (let i = 0; i < str.length; i++) {
-                    const char = str.charCodeAt(i);
-                    let attr = (15 | (i << 4)) << 16
-                    this.renderGlyphAtXY(char | attr, x, y);
-                    x += M.cellWidth;
-                }
-            }
-
-            this._forceRender = false;
-        }
+        this._forceRender = false;
 
     }
+
 }
