@@ -120,8 +120,9 @@ class RendererUtils {
   }
 }
 
-// src/renderer/renderer.ts
-class Renderer {
+// src/renderer/bitmap-renderer.ts
+class BitmapRenderer {
+  _container;
   _canvas;
   _ctx;
   _atlas;
@@ -135,12 +136,25 @@ class Renderer {
   _forceRender = false;
   _rendererBuffer = null;
   _clearColour = "#000000";
-  constructor(canvas, atlas, metrics) {
+  constructor(container, canvas, atlas, metrics) {
+    this._container = container;
     this._canvas = canvas;
     this._ctx = canvas.getContext("2d");
     this._atlas = atlas;
   }
-  configure(metrics) {
+  configure(metrics, containerOnly) {
+    this._container.style.left = metrics.containerLeft + "px";
+    this._container.style.top = metrics.containerTop + "px";
+    if (containerOnly) {
+      return;
+    }
+    this._container.style.width = metrics.rendererWidth + "px";
+    this._container.style.height = metrics.rendererHeight + "px";
+    this._canvas.style.width = metrics.rendererWidth + "px";
+    this._canvas.style.height = metrics.rendererHeight + "px";
+    this._canvas.width = metrics.rendererWidth * metrics.dpr;
+    this._canvas.height = metrics.rendererHeight * metrics.dpr;
+    this._ctx.setTransform(metrics.dpr, 0, 0, metrics.dpr, 0, 0);
     this._rows = metrics.rows;
     this._cols = metrics.cols;
     this._cellW = metrics.cellWidth;
@@ -148,11 +162,6 @@ class Renderer {
     this._viewW = metrics.rendererWidth;
     this._viewH = metrics.rendererHeight;
     this._dpr = metrics.dpr;
-    this._canvas.width = this._viewW * this._dpr;
-    this._canvas.height = this._viewH * this._dpr;
-    this._canvas.style.width = this._viewW + "px";
-    this._canvas.style.height = this._viewH + "px";
-    this._ctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
     this._forceRender = true;
   }
   renderGlyphAtXY(char_attr, x, y) {
@@ -2234,13 +2243,19 @@ function calculateRendererMetrics(containerWidth, containerHeight, dpr, minCols,
   } else if (cols > maxCols) {
     cols = maxCols;
   }
+  const rendererWidth = Math.floor(cellWidth * cols);
+  const rendererHeight = Math.floor(cellHeight * rows);
+  const containerLeft = Math.floor((containerWidth - rendererWidth) / 2);
+  const containerTop = Math.floor((containerHeight - rendererHeight) / 2);
   return {
     cols,
     rows,
     cellWidth,
     cellHeight,
-    rendererWidth: cellWidth * cols,
-    rendererHeight: cellHeight * rows,
+    containerLeft,
+    containerTop,
+    rendererWidth,
+    rendererHeight,
     dpr
   };
 }
@@ -2310,7 +2325,7 @@ class Unnamed {
     this._buffer = new PlainBuffer(this._metrics.cols, this._maxCols, this._metrics.rows);
     this._atlas = new Atlas(this._palette);
     this._atlas.configure(this._metrics);
-    this._renderer = new Renderer(config.canvas, this._atlas, this._metrics);
+    this._renderer = new BitmapRenderer(config.container, config.canvas, this._atlas, this._metrics);
     this._renderer.clearColour = this.palette.getHexColour(0);
     this._renderer.buffer = this._buffer;
     this._tickTimer = setInterval(this.tick, 30);
@@ -2361,10 +2376,10 @@ class Unnamed {
   }
   onresize() {
     let newMetrics = calculateRendererMetrics(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1, this._minCols, this._maxCols, this._rows);
-    if (this._metrics === undefined || newMetrics.cols != this._metrics.cols || newMetrics.rows != this._metrics.rows || newMetrics.cellWidth != this._metrics.cellWidth || newMetrics.cellHeight != this._metrics.cellHeight || newMetrics.rendererWidth != this._metrics.rendererWidth || newMetrics.rendererHeight != this._metrics.rendererHeight) {
+    if (this._metrics === undefined || newMetrics.cols != this._metrics.cols || newMetrics.rows != this._metrics.rows || newMetrics.cellWidth != this._metrics.cellWidth || newMetrics.cellHeight != this._metrics.cellHeight || newMetrics.containerLeft != this._metrics.containerLeft || newMetrics.containerTop != this._metrics.containerTop || newMetrics.rendererWidth != this._metrics.rendererWidth || newMetrics.rendererHeight != this._metrics.rendererHeight) {
       this._metrics = newMetrics;
+      this._renderer.configure(this._metrics, true);
       this._resizeNeeded = true;
-      console.log(this._metrics.cols, this._metrics.rows, this._metrics.rendererWidth, this._metrics.rendererHeight);
     }
   }
   tick() {
@@ -2481,6 +2496,7 @@ class Unnamed {
 
 // demo.ts
 var un = new Unnamed({
+  container: document.getElementById("container"),
   canvas: document.getElementById("xcanvas"),
   maxCols: 120,
   rows: 40

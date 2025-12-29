@@ -1,5 +1,5 @@
 import { type Colour, Palette} from "./renderer/palette.ts";
-import { Renderer} from "./renderer/renderer.ts";
+import { BitmapRenderer} from "./renderer/bitmap-renderer.ts";
 import { Atlas } from "./atlas/atlas.ts";
 
 import {PlainBuffer} from "./buffer/plain-buffer.ts";
@@ -71,7 +71,7 @@ type UnnamedEvents = {
 }
 
 export class Unnamed {
-    private _renderer:Renderer;
+    private _renderer:BitmapRenderer;
     private _atlas:Atlas;
     private _palette = new Palette();
     private _tickTimer: ReturnType<typeof setInterval> | null = null;
@@ -132,7 +132,7 @@ export class Unnamed {
         this._atlas = new Atlas(this._palette);
         this._atlas.configure(this._metrics);
 
-        this._renderer = new Renderer(
+        this._renderer = new BitmapRenderer(
             config.container, config.canvas, this._atlas, this._metrics
         );
         this._renderer.clearColour = this.palette.getHexColour(0);
@@ -163,7 +163,7 @@ export class Unnamed {
         return this._atlas;
     }
 
-    get renderer():Renderer {
+    get renderer():BitmapRenderer {
         return this._renderer;
     }
 

@@ -4,7 +4,7 @@ import { PlainBuffer } from "../buffer/plain-buffer.ts";
 import {RendererUtils} from "./renderer-utils.ts";
 import type {RendererMetrics} from "../metrics.ts";
 
-export class Renderer {
+export class BitmapRenderer {
     private _container: HTMLElement;
     private _canvas: HTMLCanvasElement;
     private _ctx: CanvasRenderingContext2D;
