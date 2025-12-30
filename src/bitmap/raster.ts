@@ -1,12 +1,11 @@
 import { Bitmap32 } from "./bitmap.ts";
 import { Array32 } from "./array32.ts";
 
-export interface IBuffer {
-    get dirty():boolean;
+export interface IRaster {
     get cols():number;
     get rows():number;
-    get generation():number;
-    set generation(generation:number);
+    beginRaster():number;
+    endRaster():void;
     clear(char_attr:number):void;
     set(x:number, y:number, char_attr:number):void;
     hline(x:number, y:number, w: number, char_attr:number, pattern?:number):void;

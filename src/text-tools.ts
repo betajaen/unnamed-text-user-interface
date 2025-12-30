@@ -1,4 +1,4 @@
-import {Array32} from "./buffer/array32.ts";
+import {Array32} from "./bitmap/array32.ts";
 import {WasmTextShaper} from "unicode-shaper";
 
 const THRESHOLD = 20;

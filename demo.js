@@ -47,7 +47,7 @@ class Palette {
   }
 }
 
-// src/buffer/array32.ts
+// src/bitmap/array32.ts
 class Array32 {
   _buffer;
   _begin;
@@ -1091,7 +1091,7 @@ class TextTools {
   }
 }
 
-// src/buffer/bitmap-utils.ts
+// src/bitmap/bitmap-utils.ts
 class Bitmap32Utils {
   static _temp = new Uint32Array(512);
   static Clear(dst, value) {
@@ -1399,7 +1399,7 @@ class Bitmap32Utils {
   }
 }
 
-// src/buffer/bitmap32.ts
+// src/bitmap/bitmap32.ts
 class Bitmap32 {
   _cols;
   _stride;
@@ -1435,37 +1435,35 @@ class Bitmap32 {
   }
 }
 
-// src/buffer/plain-buffer.ts
-class PlainBuffer {
+// src/bitmap/phased-raster.ts
+class PhasedRaster {
   _glyphs;
-  _generation = 0;
-  _generationBits = 0;
-  _dirtyGeneration = 255;
+  _phase = 0;
+  _phaseBit = 0;
+  _modified = false;
   constructor(cols, maxCols, rows) {
     this._glyphs = new Bitmap32(cols, rows, maxCols);
     this._glyphs.buffer.fill(0);
+    this._phase = 0;
+    this._phaseBit = 0;
+    this._modified = true;
   }
   configure(metrics) {
     if (this._glyphs.rows != metrics.rows || this._glyphs.cols != metrics.cols) {
       this._glyphs.cols = Math.min(this._glyphs.stride, metrics.cols);
     }
   }
-  get generation() {
-    return this._generation;
+  get phase() {
+    return this._phase;
   }
-  set generation(generation) {
-    this._generation = generation >>> 0;
-    this._generationBits = generation << 24 >>> 0;
-    this._dirtyGeneration = 255;
-  }
-  get generationBits() {
-    return this._generationBits;
+  get phaseBit() {
+    return this._phaseBit;
   }
   get glyphs() {
     return this._glyphs;
   }
-  get dirty() {
-    return this._generation === this._dirtyGeneration;
+  get modified() {
+    return this._modified;
   }
   get cols() {
     return this._glyphs.cols;
@@ -1476,50 +1474,50 @@ class PlainBuffer {
   get stride() {
     return this._glyphs.stride;
   }
-  bumpGeneration() {
-    this._dirtyGeneration = this._generation;
-    this._generation++;
-    if (this._generation >= 255) {
-      this._generation = 1;
-    }
-    this._generationBits = this._generation << 24 >>> 0;
+  beginRaster() {
+    return this._phaseBit;
+  }
+  endRaster() {
+    this._modified = false;
+    this._phase = 1 - this._phase >>> 0;
+    this._phaseBit = this._phase << 31 >>> 0;
   }
   clear(char_attr) {
-    Bitmap32Utils.Clear(this._glyphs, char_attr & 16777215 | this._generationBits);
-    this._dirtyGeneration = this._generation;
+    Bitmap32Utils.Clear(this._glyphs, char_attr & 2147483647 | this._phaseBit);
+    this._modified = true;
   }
   set(x, y, char_attr) {
-    Bitmap32Utils.Set(this._glyphs, x, y, char_attr & 16777215 | this._generationBits);
-    this._dirtyGeneration = this._generation;
+    Bitmap32Utils.Set(this._glyphs, x, y, char_attr & 2147483647 | this._phaseBit);
+    this._modified = true;
   }
   hline(x, y, w, char_attr, pattern) {
-    Bitmap32Utils.HLine(this._glyphs, x, y, w, char_attr & 16777215 | this._generationBits, pattern || 4294967295);
-    this._dirtyGeneration = this._generation;
+    Bitmap32Utils.HLine(this._glyphs, x, y, w, char_attr & 2147483647 | this._phaseBit, pattern || 4294967295);
+    this._modified = true;
   }
   vline(x, y, h, char_attr, pattern) {
-    Bitmap32Utils.VLine(this._glyphs, x, y, h, char_attr & 16777215 | this._generationBits, pattern || 4294967295);
-    this._dirtyGeneration = this._generation;
+    Bitmap32Utils.VLine(this._glyphs, x, y, h, char_attr & 2147483647 | this._phaseBit, pattern || 4294967295);
+    this._modified = true;
   }
   fill(x, y, w, h, char_attr, pattern) {
-    Bitmap32Utils.Fill(this._glyphs, x, y, w, h, char_attr & 16777215 | this._generationBits, pattern || 4294967295);
-    this._dirtyGeneration = this._generation;
+    Bitmap32Utils.Fill(this._glyphs, x, y, w, h, char_attr & 2147483647 | this._phaseBit, pattern || 4294967295);
+    this._modified = true;
   }
   print(x, y, text, char_attr) {
-    Bitmap32Utils.Print(this._glyphs, x, y, text, char_attr & 16711680 | this._generationBits);
-    this._dirtyGeneration = this._generation;
+    Bitmap32Utils.Print(this._glyphs, x, y, text, char_attr & 2147418112 | this._phaseBit);
+    this._modified = true;
   }
   border(x, y, w, h, char_attrs) {
     if (char_attrs && char_attrs.length === 9) {
       const char_attrs_gen = new Array(9);
       for (let i = 0;i < 9; i++) {
-        char_attrs_gen[i] = char_attrs[i] & 16777215 | this._generationBits;
+        char_attrs_gen[i] = char_attrs[i] & 2147483647 | this._phaseBit;
       }
       Bitmap32Utils.Border(this._glyphs, x, y, w, h, char_attrs_gen);
-      this._dirtyGeneration = this._generation;
+      this._modified = true;
     }
   }
   blit(x, y, src, sx, sy, sw, sh) {
-    this._dirtyGeneration = this._generation;
+    this._modified = true;
   }
 }
 
@@ -1541,7 +1539,7 @@ class ViewTools {
       tidx = idx;
       cols = buffer.cols;
       while (cols--) {
-        const char_attr = buf[idx++];
+        const char_attr = buf[idx++] & 2147483647;
         if (char_attr !== 0) {
           const entry = atlas.get(char_attr);
           if (entry.sheet != srcSheetNum) {
@@ -1557,25 +1555,25 @@ class ViewTools {
       idx = tidx + stride;
     }
   }
-  static CopyTested(dst, buffer, atlas, metrics) {
-    if (buffer === undefined || dst === undefined || atlas === undefined || metrics === undefined) {
+  static CopyTested(dst, raster, atlas, metrics) {
+    if (raster === undefined || dst === undefined || atlas === undefined || metrics === undefined) {
       return;
     }
-    let x = 0, y = 0, idx = 0, tidx = 0, cols = 0, stride = buffer.stride, rows = buffer.rows;
+    let x = 0, y = 0, idx = 0, tidx = 0, cols = 0, stride = raster.stride, rows = raster.rows;
     let srcSheetNum = -1;
     let srcSheet;
-    const buf = buffer.glyphs.buffer;
-    const genBits = buffer.generationBits;
+    const buf = raster.glyphs.buffer;
+    const phaseBit = raster.phaseBit;
     const cellW = metrics.cellWidth;
     const cellH = metrics.cellHeight;
     const scaledW = cellW * metrics.dpr;
     const scaledH = cellH * metrics.dpr;
     while (rows--) {
       tidx = idx;
-      cols = buffer.cols;
+      cols = raster.cols;
       while (cols--) {
         const char_attr = buf[idx++];
-        if ((char_attr & 4278190080) !== genBits) {
+        if ((char_attr & 2147483647) !== phaseBit) {
           x += cellW;
           continue;
         }
@@ -1620,7 +1618,7 @@ class View {
     }
     this._ctx = this._canvas.getContext("2d");
     if (buffer === undefined) {
-      this._buffer = new PlainBuffer(metrics.cols, metrics.maxCols, metrics.rows);
+      this._buffer = new PhasedRaster(metrics.cols, metrics.maxCols, metrics.rows);
     } else {
       this._buffer = buffer;
     }
@@ -1858,7 +1856,7 @@ class Atlas {
   }
   render(char_attr) {
     let char = char_attr & 65535;
-    let attr = (char_attr & 4294901760) >> 16;
+    let attr = (char_attr & 2147418112) >> 16;
     if (char === 9608) {
       char = 1;
     }
@@ -2367,9 +2365,9 @@ class Unnamed {
       this._view.forceRender();
     }
     if (this._view.willRender()) {
-      this._emitter.emit("render", this.buffer.generation);
+      this._emitter.emit("render", this.buffer.phase);
       this._view.render();
-      this.buffer.bumpGeneration();
+      this.buffer.endRaster();
     }
   }
   testPattern() {
@@ -2478,20 +2476,20 @@ var un = new Unnamed({
 });
 var buf = un.buffer;
 un.on("resize", (evt) => {
-  buf.print(3, 3, `${evt.cols} × ${evt.rows}`, 524288);
+  buf.print(3, 3, `${evt.cols} × ${evt.rows}      `, 524288);
 });
 un.on("render", (gen) => {
-  buf.print(10, 0, `Gen: ${gen} `, 983040);
+  buf.print(10, 0, `Phase: ${gen} `, 983040);
 });
 un.on("keyup", (e) => {
-  buf.print(5, 20, `${e.key}   Up.    `, 983040);
+  buf.print(5, 20, `${e.key}   Up    `, 983040);
 });
 un.on("keydown", (e) => {
-  buf.print(5, 20, `${e.key}  Down.   `, 983040);
+  buf.print(5, 20, `${e.key}  Down   `, 983040);
 });
 buf.print(0, 0, "Hello", 983040);
 buf.hline(0, 1, 5, 917527);
-buf.print(0, 1, "012345678901234567890123456789012345678901234567890", 983040);
+buf.print(0, 2, "012345678901234567890123456789012345678901234567890", 983040);
 buf.hline(0, 5, 45, 9437210, 2863289685);
 buf.vline(3, 6, 17, 9437210, 2863289685);
 buf.fill(7, 7, 20, 6, 9437210, 2863289685);

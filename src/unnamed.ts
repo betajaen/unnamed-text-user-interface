@@ -2,9 +2,9 @@ import { type Colour, Palette} from "./renderer/palette.ts";
 import { View} from "./renderer/view.ts";
 import { Atlas } from "./atlas/atlas.ts";
 
-import {PlainBuffer} from "./buffer/plain-buffer.ts";
+import {PhasedRaster} from "./bitmap/phased-raster.ts";
 import {type RendererMetrics, calculateRendererMetrics } from "./metrics.ts";
-import {type IBuffer} from "./buffer/buffer.ts";
+import {type IRaster} from "./bitmap/raster.ts";
 import mitt, { Emitter } from "mitt";
 
 export const DefaultPalette = [
@@ -173,7 +173,7 @@ export class Unnamed {
         return this._metrics.rows;
     }
 
-    get buffer():PlainBuffer {
+    get buffer():PhasedRaster {
         return this._view.buffer;
     }
 
@@ -231,9 +231,9 @@ export class Unnamed {
             this._view.forceRender();
         }
         if (this._view.willRender()) {
-            this._emitter.emit('render', this.buffer.generation);
+            this._emitter.emit('render', this.buffer.phase);
             this._view.render();
-            this.buffer.bumpGeneration();
+            this.buffer.endRaster();
         }
     }
 

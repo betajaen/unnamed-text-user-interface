@@ -127,7 +127,7 @@ export class Atlas {
 
     private render(char_attr:number):AtlasGlyph {
         let char = char_attr & 0x0000FFFF;
-        let attr = (char_attr & 0xFFFF0000) >> 16;
+        let attr = (char_attr & 0x7FFF0000) >> 16;
 
         if (char === 0x2588) {
             char = 1;

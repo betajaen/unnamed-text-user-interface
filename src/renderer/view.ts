@@ -1,9 +1,9 @@
 import { Atlas } from "./../atlas/atlas.ts";
 import { AtlasSheet } from "./../atlas/atlas-sheet.ts";
-import { PlainBuffer } from "../buffer/plain-buffer.ts";
+import { PhasedRaster } from "../bitmap/phased-raster.ts";
 import {ViewTools} from "./view-tools.ts";
 import type {RendererMetrics} from "../metrics.ts";
-import type {Bitmap32} from "../buffer/bitmap32.ts";
+import type {Bitmap32} from "../bitmap/bitmap32.ts";
 
 export class View {
     private _container: HTMLElement;
@@ -12,10 +12,10 @@ export class View {
     private _atlas:Atlas;
     private _metrics:RendererMetrics;
     private _forceRender:boolean = false;
-    private _buffer:PlainBuffer;
+    private _buffer:PhasedRaster;
     private _clearColour:string = '#000000'
 
-    constructor(container:HTMLElement, canvas:HTMLCanvasElement|undefined, atlas:Atlas, metrics:RendererMetrics, buffer?:PlainBuffer|undefined, zIndex?:number) {
+    constructor(container:HTMLElement, canvas:HTMLCanvasElement|undefined, atlas:Atlas, metrics:RendererMetrics, buffer?:PhasedRaster|undefined, zIndex?:number) {
         this._container = container;
 
         if (canvas === undefined) {
@@ -33,7 +33,7 @@ export class View {
         this._ctx = this._canvas.getContext("2d")!;
 
         if (buffer === undefined) {
-            this._buffer = new PlainBuffer(metrics.cols, metrics.maxCols, metrics.rows);
+            this._buffer = new PhasedRaster(metrics.cols, metrics.maxCols, metrics.rows);
         }
         else {
             this._buffer = buffer;
@@ -109,7 +109,7 @@ export class View {
         this._clearColour = clearColour;
     }
 
-    set buffer(buffer:PlainBuffer) {
+    set buffer(buffer:PhasedRaster) {
         this._buffer = buffer;
         this._forceRender = true;
     }
