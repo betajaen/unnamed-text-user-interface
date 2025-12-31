@@ -1,4 +1,4 @@
-import { Bitmap32Utils } from "./bitmap-utils.ts";
+import {Bitmap32Utils, PrintOptions} from "./bitmap-utils.ts";
 import { Bitmap32 } from "./bitmap32.ts";
 import { type IRaster } from "./raster.ts";
 import type {RendererMetrics} from "../metrics.ts";
@@ -64,23 +64,23 @@ export class PhasedRaster implements IRaster {
         this._modified = true;
     }
     set(x: number, y: number, char_attr: number): void {
-        Bitmap32Utils.Set(this._glyphs, x, y, (char_attr & 0x7FFF_FFFF) | this._phaseBit);
+        Bitmap32Utils.Set(this._glyphs, x|0, y|0, (char_attr & 0x7FFF_FFFF) | this._phaseBit);
         this._modified = true;
     }
     hline(x: number, y: number, w: number, char_attr: number, pattern?:number): void {
-        Bitmap32Utils.HLine(this._glyphs, x, y, w, (char_attr & 0x7FFF_FFFF) | this._phaseBit, pattern || 0xFFFF_FFFF);
+        Bitmap32Utils.HLine(this._glyphs, x|0, y|0, w>>>0, (char_attr & 0x7FFF_FFFF) | this._phaseBit, pattern || 0xFFFF_FFFF);
         this._modified = true;
     }
     vline(x: number, y: number, h: number, char_attr: number, pattern?:number): void {
-        Bitmap32Utils.VLine(this._glyphs, x, y, h, (char_attr & 0x7FFF_FFFF) | this._phaseBit, pattern || 0xFFFF_FFFF);
+        Bitmap32Utils.VLine(this._glyphs, x|0, y|0, h>>>0, (char_attr & 0x7FFF_FFFF) | this._phaseBit, pattern || 0xFFFF_FFFF);
         this._modified = true;
     }
     fill(x: number, y: number, w: number, h: number, char_attr: number, pattern?:number,): void {
-        Bitmap32Utils.Fill(this._glyphs, x, y, w, h, (char_attr & 0x7FFF_FFFF) | this._phaseBit, pattern || 0xFFFF_FFFF);
+        Bitmap32Utils.Fill(this._glyphs, x|0, y|0, w>>>0, h>>>0, (char_attr & 0x7FFF_FFFF) | this._phaseBit, pattern || 0xFFFF_FFFF);
         this._modified = true;
     }
-    print(x:number, y:number, text:string|Array32, char_attr:number):void {
-        Bitmap32Utils.Print(this._glyphs, x, y, text, (char_attr & 0x7FFF_0000) | this._phaseBit);
+    print(x:number, y:number, text:string|Array32, char_attr:number, options?:PrintOptions):void {
+        Bitmap32Utils.Print(this._glyphs, x|0, y|0, text, (char_attr & 0x7FFF_0000), this._phaseBit, options);
         this._modified = true;
     }
     border(x: number, y: number, w: number, h: number, char_attrs: number[]): void {
@@ -89,7 +89,7 @@ export class PhasedRaster implements IRaster {
             for(let i=0;i < 9;i++) {
                 char_attrs_gen[i] = (char_attrs[i]! & 0x7FFF_FFFF) | this._phaseBit
             }
-            Bitmap32Utils.Border(this._glyphs, x, y, w, h, char_attrs_gen);
+            Bitmap32Utils.Border(this._glyphs, x|0, y|0, w>>>0, h>>>0, char_attrs_gen);
             this._modified = true;
         }
     }
