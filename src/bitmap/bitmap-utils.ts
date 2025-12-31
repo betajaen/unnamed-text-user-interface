@@ -6,6 +6,16 @@ function ror(value: number, shift: number): number {
     return ((value >>> shift) | (value << shift)) >>> 0;
 }
 
+export type PrintAlignment = 'left' | 'center' | 'right';
+
+export type PrintOptions = {
+    alignment?: PrintAlignment;
+    tabSize?: number;
+    boundsLeft?: number;
+    boundsRight?: number;
+    boundsType?: 'clip' | 'region';
+}
+
 export class Bitmap32Utils {
 
     static _temp:Uint32Array = new Uint32Array(512);
@@ -20,86 +30,91 @@ export class Bitmap32Utils {
         }
     }
 
-    static Print(dst:Bitmap32, x: number, y:number, text: string|Array32, attr:number|undefined) {
+    static Print(dst:Bitmap32, x: number, y:number, text: string|Array32, attr:number|undefined, phaseBit:number, options?:PrintOptions|undefined) {
 
         if (!dst)
             return;
+
+        options = {
+            alignment: 'left',
+            tabSize: undefined,
+            boundsLeft: 0,
+            boundsRight: dst.cols,
+            boundsType: 'clip',
+            ... options ?? {}
+        };
+
+        options.boundsLeft = Math.max(0, options.boundsLeft || 0) | 0;
+        options.boundsRight = Math.min(dst.cols, options.boundsRight || dst.cols) | 0;
+
 
         if (typeof text === 'string') {
-            const textFlags = TextTools.getTextFlags(text);
-            if (textFlags <= TextFlags.LATIN_1) {
-                Bitmap32Utils._PrintLatin1(dst, x, y, text, attr || 0x000F_0000);
-            }
-            else {
-                Bitmap32Utils._PrintArray(dst, x, y, TextTools.EncodeArray32(text, undefined, undefined, attr), undefined);
-            }
+            Bitmap32Utils._PrintImpl(dst, x, y, TextTools.EncodeArray32(text, undefined, undefined, (attr || 0x000F_0000) & 0x7FFF_0000), 0, options);
         }
         else {
-            Bitmap32Utils._PrintArray(dst, x, y, text, attr);
+            Bitmap32Utils._PrintImpl(dst, x, y, text, phaseBit, options);
         }
     }
 
-    private static _PrintLatin1(dst:Bitmap32, x: number, y:number, text: string, attr:number) {
+    private static _PrintImpl(dst:Bitmap32, x:number, y:number, text:Array32, phaseBit:number, options:PrintOptions) {
         if (!dst)
             return;
 
-        const stride = dst.stride;
-        const cols = dst.cols;
+        x = x | 0;
+        y = y | 0;
+
         const rows = dst.rows;
-        const buf = dst.buffer;
 
         if (y < 0 || y >= rows)
             return;
 
-        const len = text.length;
-        const left = x < 0 ? 0 : x;
-        const right = x + len > cols ? cols : x + len;
+        const stride = dst.stride;
+        const cols = dst.cols;
+        const buf = dst.buffer;
+        const regionLeft = Math.max(0, options.boundsLeft!) | 0;
+        const regionRight = Math.min(cols, options.boundsRight!) | 0;
+        let clipLeft, clipRight;
+        if (options.boundsType === 'clip') {
+            clipLeft = Math.max(0, regionLeft);
+            clipRight = Math.min(cols, regionRight);
+        }
+        else {
+            clipLeft = 0;
+            clipRight = cols;
+        }
+        const regionWidth = regionRight - regionLeft;
+
+        if (regionWidth <= 0 || (clipRight <= clipLeft)) {
+            return;
+        }
+
+        const len = text.size;
+
+        if (options.alignment === 'center') {
+            x = (regionLeft + x + (regionWidth / 2) - (len / 2)) | 0;
+        }
+        else if (options.alignment === 'right') {
+            x = (regionRight - len - x) | 0;
+        }
+        else {
+            x = (regionLeft + x) | 0;
+        }
+
+
+        const left = x < clipLeft ? clipLeft : x;
+        const right = (x + len > clipRight+1) ? (clipRight+1) : x + len;
 
         if (left >= right)
             return;
 
         const textStart = left - x;
-        const width = right - left;
-        let offset = left + (y * stride);
+        const textEnd = textStart + (right - left);
+        let lineOffset = (y * stride) + left;
 
-        for(let i=textStart;i < textStart + width; i++) {
-            buf[offset++] = (text.charCodeAt(i) & 0xFFFF) | attr;
+        for(let i=textStart;i < textEnd; i++) {
+            buf[lineOffset++] = (text.get(i)! & 0x7FFF_FFFF) | phaseBit;
         }
-    }
 
-    private static _PrintArray(dst:Bitmap32, x: number, y:number, array:Array32, attr:number|undefined) {
-        if (!dst)
-            return;
-
-        const stride = dst.stride;
-        const cols = dst.cols;
-        const rows = dst.rows;
-        const buf = dst.buffer;
-
-        if (y < 0 || y >= rows)
-            return;
-
-        const len = array.size;
-        const left = x < 0 ? 0 : x;
-        const right = x + len > cols ? cols : x + len;
-
-        if (left >= right)
-            return;
-
-        const textStart = left - x;
-        const width = right - left;
-        let offset = left + (y * stride);
-
-        if (attr === undefined) {
-            for (let i = textStart; i < textStart + width; i++) {
-                buf[offset++] = array.get(i)!;
-            }
-        }
-        else {
-            for (let i = textStart; i < textStart + width; i++) {
-                buf[offset++] = (array.get(i)!) | attr;
-            }
-        }
     }
 
     static HLine(dst:Bitmap32, x: number, y:number, w:number, value: number, pattern: number) {
@@ -115,7 +130,7 @@ export class Bitmap32Utils {
             return;
 
         const left = x < 0 ? 0 : x;
-        const right = x + w > cols ? cols : x + w;
+        const right = x + w > (cols+1) ? (cols+1) : x + w;
 
         if (left >= right)
             return;
