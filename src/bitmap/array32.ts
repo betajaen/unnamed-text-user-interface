@@ -44,7 +44,7 @@ export class Array32 {
         const pos = this._begin + offset;
         if (pos < 0 || pos >= this._buffer.length)
             throw `Out of bounds`;
-        return this._buffer[pos];
+        return this._buffer[pos]!;
     }
 
     needsSpace(count:number) {
